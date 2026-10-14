@@ -291,6 +291,16 @@ export class SessionController extends TypertRemoteService {
   }
 
   /**
+   * Select a model for one Session without saving the deployment default.
+   * @param request - Session identity and requested model selection.
+   * @returns the validated selection installed for subsequent Session requests.
+   */
+  @Remote('selectSessionModel')
+  selectSessionModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
+    return this.commands.selectModel(request, false)
+  }
+
+  /**
    * Select the first available account model after login when no provider API key is configured.
    * Intranet mode rejects this account-only operation before reading provider credentials.
    * @returns after saving the first available model or retaining the existing default.

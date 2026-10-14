@@ -647,6 +647,27 @@ describe('Web session model selection', () => {
     expect(saves).toHaveLength(2)
   })
 
+  it('selects a model for one Session without changing the deployment default', async () => {
+    const { ctx, sessionId } = await harness()
+    const saved: unknown[] = []
+    const controller = createSessionTestController(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      saveDefaultModelSelection: (selection) => { saved.push(selection); return Promise.resolve() },
+      cwd: '/tmp',
+    })
+    expect(await controller.selectSessionModel({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max',
+    })).toEqual({ selected: { provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' } })
+    expect(currentSelection(ctx, sessionId)).toEqual({
+      provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max',
+    })
+    expect(saved).toEqual([])
+    await expect(controller.selectSessionModel({ sessionId, provider: 'missing', model: 'model' }))
+      .rejects.toMatchObject({ code: 'session/model-unavailable' })
+    expect(saved).toEqual([])
+    await ctx.fiber.dispose()
+  })
+
   it('saves an accepted selection as the default and survives a storage failure', async () => {
     const { ctx, sessionId } = await harness()
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})

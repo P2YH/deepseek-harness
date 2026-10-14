@@ -86,6 +86,8 @@ In standard account compositions, `initializeDefaultModel()` saves the first ava
 
 A successful `selectModel` response acknowledges the Session-local selection without waiting for the default profile setting to save. Default saves run in the background in submission order; a failure logs a warning and leaves the Session selection intact. New Sessions read the last successfully saved default.
 
+Callers such as the Office portal that need an application-scoped model preference should use the public `selectSessionModel` Remote method. It reuses the same provider, catalog, and availability validation, binds the selection only to the specified Session, and does not save the DSH global default; `selectModel` keeps its existing default-saving semantics.
+
 -----
 
 <a id="configuration"></a>
