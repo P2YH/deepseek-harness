@@ -27,6 +27,8 @@ The Web GUI lets users switch the model and reasoning effort for an existing ses
 <a id="use-this-package"></a>
 ## Use this package
 
+When neither a model selection nor an available model exists, the composer shows **Configure a model**. Opening it directs the user to **Settings → Models** to add a provider. No official model is selected automatically.
+
 DeepSeek account and API-key routes appear as separate provider groups, each exposing the same configured model catalog.
 
 The unselected model label uses the same regular weight as an available model name and retains the saved reasoning effort caption for existing and new sessions; effort editing requires an available model. Clicking the unselected trigger opens the model list directly; Escape closes it.

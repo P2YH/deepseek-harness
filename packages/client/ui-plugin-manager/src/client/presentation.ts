@@ -23,9 +23,11 @@ const OFFICIAL_NPM_HOST = 'registry.npmjs.org'
  * @param registry - the registry, null for the one pnpm's own configuration names.
  * @param t - the manager's translate seat.
  * @param resolved - the URL pnpm's own configuration names, null while the Host could not read it.
+ * @param intranet - whether null names local offline installation instead of pnpm's registry.
  * @returns the name and the host.
  */
-export function registryText(registry: Registry, t: Translate, resolved: string | null): { name: string; host: string } {
+export function registryText(registry: Registry, t: Translate, resolved: string | null, intranet = false): { name: string; host: string } {
+  if (intranet && registry === null) return { name: t('registryOffline'), host: '' }
   const url = registry ?? resolved
   // A configuration the Host could not read names no registry: the entry keeps the neutral default name.
   if (url === null) return { name: t('registryDefault'), host: OFFICIAL_NPM_HOST }
@@ -50,6 +52,7 @@ const CODE_KEYS = {
   'unaddressable': 'reasonUnaddressable',
   'unknown-plugin': 'reasonUnknownPlugin',
   'invalid-spec': 'reasonInvalidSpec',
+  'intranet-source-required': 'installProblemIntranetSource',
   'ambiguous-install': 'reasonAmbiguousInstall',
   'not-bundle': 'reasonNotBundle',
   'not-removable': 'reasonNotRemovable',

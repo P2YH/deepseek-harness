@@ -87,10 +87,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Owns the default model selection independently of any Host or transport. Each operation reads the owning Config references.',
     methods: [
       {
-        signature: 'currentSelection(): ModelSelection',
+        signature: 'currentSelection(): ModelSelection | null',
         description: 'Read the current default model selection.',
         parameters: [],
-        returns: 'a detached provider, model, and optional reasoning selection.',
+        returns: 'a detached selection, or null for no default or an official route in intranet mode.',
+        throws: ['when provider and model are not configured together.'],
       },
       {
         signature: 'async saveSelection(next: ModelSelection): Promise<void>',
@@ -1363,8 +1364,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'llm',
-    summary: 'The abstract `llm` service: an adapter registry plus a streaming model-call API, interceptable via the `llm/stream` waterfall.',
-    description: 'The abstract `llm` service: an adapter registry plus a streaming model-call API, interceptable via the `llm/stream` waterfall.',
+    summary: 'Adapter registry and model-call service, interceptable through the `llm/stream` waterfall.',
+    description: 'Adapter registry and model-call service, interceptable through the `llm/stream` waterfall.',
     methods: [
       {
         signature: 'registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle',
@@ -1429,7 +1430,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async listModels(provider: string): Promise<LlmModelInfo[]>',
-        description: 'Discover models advertised by one registered provider. Catalog membership does not constrain core routing. Catalog-driven entry points may restrict selection and submission to the advertised models.',
+        description: 'Discover models advertised by one registered provider. Catalog membership constrains execution when `requireAvailableModel` is enabled. Other entry points may independently restrict selection to advertised models.',
         parameters: [{ name: 'provider', description: 'registered provider route to inspect.' }],
         returns: 'detached model metadata in adapter-preferred order.',
       },
@@ -1662,7 +1663,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote async registries(): Promise<PluginRegistries>',
         description: 'Read the registries this manager asks: the configured first one, its fallbacks in order, and what pnpm\'s own configuration names.',
         parameters: [],
-        returns: 'The registries in pnpm\'s comparison form; null is the one pnpm\'s own configuration names, `resolved` as pnpm reads it now.',
+        returns: 'The registries in pnpm\'s comparison form. In standard mode, null names pnpm\'s own registry, read as `resolved`. In intranet mode, only an explicit nonpublic registry is returned; null permits local offline installation and no fallback is offered.',
       },
       {
         signature: '@Remote async inspect(spec: string, options?: InspectOptions, signal?: AbortSignal): Promise<PluginSpecInspection>',
@@ -1782,6 +1783,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'readonly telemetryDisabledEnv: string | undefined',
         description: 'Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly distributionMode?: DistributionMode',
+        description: 'Fixed product mode, applied above every editable profile layer.',
         parameters: [],
       },
     ],
@@ -1939,13 +1945,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
-        description: 'Select one Session-local model after explicitly resuming the Session; save the default in the background.',
+        description: 'Select one Session-local model and save the default in the background.',
         parameters: [{ name: 'request', description: 'Session identity and requested model selection.' }],
         returns: 'the normalized selection installed for the Session, without waiting for default persistence.',
       },
       {
         signature: '@Remote async initializeDefaultModel(): Promise<void>',
-        description: 'Select the first available account model after login when no provider API key is configured.',
+        description: 'Select the first available account model after login when no provider API key is configured. Intranet mode rejects this account-only operation before reading provider credentials.',
         parameters: [],
         returns: 'after saving the first available model or retaining the existing default.',
       },
@@ -4523,7 +4529,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ApiSessionAgentError',
-    declaration: 'export type ApiSessionAgentError = RemoteError<\'session/not-found\' | \'session/agent-busy\' | \'session/writer-held\' | \'gateway/internal\'>;',
+    declaration: 'export type ApiSessionAgentError = RemoteError<\'session/not-found\' | \'session/agent-busy\' | \'session/writer-held\' | \'session/model-required\' | \'session/model-unavailable\' | \'gateway/internal\'>;',
   },
   {
     name: 'ApiSessionAgentResult',
@@ -5068,6 +5074,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'DirectoryRegistrationHandle',
     declaration: 'export interface DirectoryRegistrationHandle {\n    (): void;\n    replace(entries: readonly LlmConfigurableProvider[]): void;\n}',
+  },
+  {
+    name: 'DistributionMode',
+    declaration: 'export type DistributionMode = \'standard\' | \'intranet\';',
   },
   {
     name: 'Domain',
@@ -5639,7 +5649,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmRuntime',
-    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>;\n    stream(options: GenerateOptions) /* …truncated — full shape in source */',
+    declaration: 'export class LlmRuntime extends TypertRemoteService {\n    static Config;\n    constructor(ctx: Context, private readonly config: Config = {});\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    @Remote\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    @Remote\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    @Remote(\'discoverModels\')\n    async remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;\n    fileRequestText(ref: FileAttachmentRef): string;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promi /* …truncated — full shape in source */',
   },
   {
     name: 'LocalAtInput',
@@ -5691,7 +5701,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ManagementError',
-    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
+    declaration: 'export interface ManagementError {\n    code: ReadOnlyReason | \'unknown-plugin\' | \'invalid-spec\' | \'intranet-source-required\' | \'ambiguous-install\' | \'not-bundle\' | \'not-removable\' | \'stop-profile\' | \'bundle-in-use\' | \'stale-approval\' | \'incompatible-version\' | \'operation-error\';\n    diagnostic?: string;\n    incompatible?: IncompatiblePlugin[];\n}',
   },
   {
     name: 'ManualCompactAgentContext',
@@ -5799,7 +5809,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ModelCatalog',
-    declaration: 'export interface ModelCatalog {\n    readonly default: ModelSelection;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
+    declaration: 'export interface ModelCatalog {\n    readonly default: ModelSelection | null;\n    readonly routableProviders: readonly string[];\n    readonly groups: readonly ModelProviderGroup[];\n    readonly failures: readonly ModelCatalogFailure[];\n}',
   },
   {
     name: 'ModelCatalogFailure',
@@ -5939,7 +5949,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PluginInspectProblem',
-    declaration: 'export type PluginInspectProblem = \'invalid-spec\' | \'already-installed\' | \'not-found\' | \'not-a-package\' | \'not-a-bundle\' | \'network\' | \'unknown\';',
+    declaration: 'export type PluginInspectProblem = \'invalid-spec\' | \'intranet-source-required\' | \'already-installed\' | \'not-found\' | \'not-a-package\' | \'not-a-bundle\' | \'network\' | \'unknown\';',
   },
   {
     name: 'PluginInstallCancellation',
@@ -5971,7 +5981,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'PluginRegistries',
-    declaration: 'export interface PluginRegistries {\n    readonly registry: Registry;\n    readonly fallbackRegistries: readonly string[];\n    readonly resolved: string | null;\n}',
+    declaration: 'export interface PluginRegistries {\n    readonly intranet?: boolean;\n    readonly registry: Registry;\n    readonly fallbackRegistries: readonly string[];\n    readonly resolved: string | null;\n}',
   },
   {
     name: 'PluginSpecInspection',

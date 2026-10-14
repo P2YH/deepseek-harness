@@ -330,6 +330,7 @@ async function run(ctx: Context, config: Config, io: HeadlessIo): Promise<void> 
   }
 
   const selection = defaultModel.currentSelection()
+  if (selection === null) throw new Error('Select a default model before starting a task.')
   const agentOptions = { provider: selection.provider, model: selection.model }
   // This bundle composes no preset roster, so the model-facing rows sit in the
   // host plane and the agent reads them from the global layer. A deployment

@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../packages/util/launch-environment" },
     { "path": "../../vendor/cordis" },
     { "path": "../../packages/core/agent" },
     { "path": "../../packages/jobs/jobs" },

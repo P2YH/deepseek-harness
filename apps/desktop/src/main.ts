@@ -5,6 +5,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveDistributionMode, type DistributionMode } from '@deepseek-ai/dsh-launch-environment'
 import {
   app,
   BrowserWindow,
@@ -203,7 +204,7 @@ function platformLoginUrl(authorizeUrl: string): string {
   return url.href
 }
 
-function createWindow(preload: string, show = false, primary = false): BrowserWindow {
+function createWindow(preload: string, show = false, primary = false, distributionMode: DistributionMode = 'standard'): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -228,6 +229,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     } : {}),
     webPreferences: {
       preload,
+      additionalArguments: [`--dsh-distribution-mode=${distributionMode}`],
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -319,6 +321,15 @@ async function main(): Promise<void> {
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = !app.isPackaged
+  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop: invalid application manifest')
+  const modeInput: unknown = development ? process.env.DSH_DISTRIBUTION_MODE
+    : 'dshDistributionMode' in manifest ? manifest.dshDistributionMode : undefined
+  if (modeInput !== undefined && typeof modeInput !== 'string') {
+    throw new Error('desktop: invalid distribution mode in application manifest')
+  }
+  const distributionMode = resolveDistributionMode(modeInput)
+  const intranet = distributionMode === 'intranet'
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
@@ -335,7 +346,9 @@ async function main(): Promise<void> {
     return result.environment
   })
   let hostEnvironment: NodeJS.ProcessEnv = process.env
-  const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
+  const prepareHostEnvironment = async (): Promise<void> => {
+    hostEnvironment = { ...await loginShell, DSH_DISTRIBUTION_MODE: distributionMode }
+  }
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
@@ -437,14 +450,14 @@ async function main(): Promise<void> {
     navigation = next
     return next.promise
   }
-  const platformView = new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
+  const platformView = intranet ? undefined : new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
     () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin')
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView?.setSession(next) })
     return {
       start: async () => {
         const ready = await host.start()
@@ -452,11 +465,13 @@ async function main(): Promise<void> {
         hostUrl = ready.url
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
-        welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
-        analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
+        welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '), distributionMode)
+        analyticsEnabled = !intranet && await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
         stopAccount?.()
+        if (intranet) return
         const accountBackend = welcomeBackend.account
+        if (accountBackend === undefined) throw new Error('desktop welcome: account backend unavailable')
         stopAccount = accountBackend.watch((state) => {
           if (quitting) return
           if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.webContents.send(WELCOME_IPC.state, state)
@@ -614,7 +629,7 @@ async function main(): Promise<void> {
         if (stillActive && !active) throw new DesktopUpdatePreparationError('tasks-changed', locale.messages.updateTasksChanged)
         mandatoryUI?.preparingRestart(stillActive)
         // The embedded Platform document holds credentials issued by the Host that is about to stop.
-        await platformView.closeAndWait()
+        await platformView?.closeAndWait()
         requireCleanStop = true
         updateStopFailure = undefined
         await backend.stop()
@@ -632,12 +647,12 @@ async function main(): Promise<void> {
       }
       return true
     },
-    undefined, undefined, undefined,
+    undefined, intranet ? () => false : undefined, undefined,
     (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
 
   )
 
-  const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
+  const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(intranet ? {} : process.env))
 
   const downloadUpdate = async (version: string): Promise<DesktopUpdateState> => {
     void track('desktop_upgrade_click', {})
@@ -726,20 +741,22 @@ async function main(): Promise<void> {
       || !event.senderFrame.url.startsWith('dsh-app://app/')) throw new Error('Rejected Platform command')
     return owner
   }
-  ipcMain.on(PLATFORM_IPC.bootstrap, (event) => {
-    try { event.returnValue = platformView.bootstrap(event) }
-    catch { event.returnValue = null }
-  })
-  ipcMain.handle(PLATFORM_IPC.open, (event, page: unknown, bounds: unknown) => {
-    const owner = assertMainApplication(event)
-    if (page !== 'usage' && page !== 'top-up') throw new Error('Invalid Platform page')
-    return platformView.open(owner, page, platformBounds(bounds))
-  })
-  ipcMain.handle(PLATFORM_IPC.bounds, (event, bounds: unknown) => {
-    assertMainApplication(event)
-    platformView.setBounds(platformBounds(bounds))
-  })
-  ipcMain.handle(PLATFORM_IPC.close, (event) => { assertMainApplication(event); platformView.close() })
+  if (platformView !== undefined) {
+    ipcMain.on(PLATFORM_IPC.bootstrap, (event) => {
+      try { event.returnValue = platformView.bootstrap(event) }
+      catch { event.returnValue = null }
+    })
+    ipcMain.handle(PLATFORM_IPC.open, (event, page: unknown, bounds: unknown) => {
+      const owner = assertMainApplication(event)
+      if (page !== 'usage' && page !== 'top-up') throw new Error('Invalid Platform page')
+      return platformView.open(owner, page, platformBounds(bounds))
+    })
+    ipcMain.handle(PLATFORM_IPC.bounds, (event, bounds: unknown) => {
+      assertMainApplication(event)
+      platformView.setBounds(platformBounds(bounds))
+    })
+    ipcMain.handle(PLATFORM_IPC.close, (event) => { assertMainApplication(event); platformView.close() })
+  }
   // Only the main window may synchronize its palette with the native material.
   ipcMain.on(DESKTOP_IPC.nativeThemeSet, (event, source: unknown) => {
     if (mainWindow === undefined || event.sender !== mainWindow.webContents) return
@@ -760,13 +777,13 @@ async function main(): Promise<void> {
     const current = resolveDesktopStartupLocale(next, systemLanguages)
     if (current.id === locale.id) return
     locale = current
-    platformView.notifyLocaleChanged()
+    platformView?.notifyLocaleChanged()
     windowsLanguage = locale.id
     refreshApplicationMenu()
   })
   ipcMain.handle(DESKTOP_IPC.updatesStatus, (event) => {
     assertProductSender(event)
-    return presentDesktopUpdate(updates.state)
+    return presentDesktopUpdate(intranet ? { phase: 'idle' } : updates.state)
   })
   ipcMain.handle(DESKTOP_IPC.deviceInfo, (event) => {
     assertProductSender(event)
@@ -789,6 +806,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.updatesOpen, async (event) => {
     assertProductSender(event)
+    if (intranet) return
     await openUpdatePrompt()
   })
 
@@ -912,6 +930,7 @@ async function main(): Promise<void> {
   }
 
   const automaticCheck = (): void => {
+    if (intranet) return
     if (!quitting) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
     if (!quitting) void updateSchedule.check().catch((error: unknown) => { console.error(error) })
   }
@@ -952,7 +971,7 @@ async function main(): Promise<void> {
         click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
       : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
     { type: 'separator' },
-    { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
+    ...intranet ? [] : [{ label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } }],
     ...process.platform === 'darwin' || process.platform === 'win32'
       ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
     ...development ? [
@@ -1063,7 +1082,7 @@ async function main(): Promise<void> {
     }
   }
   const createMainWindow = (): BrowserWindow => {
-    const window = createWindow(appPreload, false, true)
+    const window = createWindow(appPreload, false, true, distributionMode)
     mainWindow = window
     browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
     shortcuts.attach(window)
@@ -1134,7 +1153,7 @@ async function main(): Promise<void> {
   }
   let openingWelcome: Promise<void> | undefined
   const showWelcome = (): Promise<void> => {
-    if (quitting) return Promise.resolve()
+    if (quitting || intranet) return Promise.resolve()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) {
       if (!welcomeWindow.isVisible()) void track('auth_page_view', {})
       welcomeWindow.show()
@@ -1152,14 +1171,16 @@ async function main(): Promise<void> {
         },
         startSignIn: async () => {
           if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+          if (welcomeBackend.account === undefined) throw new Error('desktop welcome: account backend unavailable')
           return welcomeBackend.account.start(desktopClientMetadata(locale.id))
         },
         cancelSignIn: async (id) => {
           if (welcomeBackend === undefined) throw new Error('desktop welcome: backend unavailable')
+          if (welcomeBackend.account === undefined) throw new Error('desktop welcome: account backend unavailable')
           return welcomeBackend.account.cancel(id)
         },
         copySignInLink: async (id) => {
-          const state = await welcomeBackend?.account.state()
+          const state = await welcomeBackend?.account?.state()
           if (state?.attempt?.id !== id || state.attempt.phase !== 'waiting-browser' || state.attempt.authorizeUrl === undefined) {
             throw new Error('desktop welcome: login link is unavailable')
           }
@@ -1176,8 +1197,8 @@ async function main(): Promise<void> {
       })
       const window = welcomeWindow
       window.once('closed', () => {
-        void welcomeBackend?.account.state().then((state) => {
-          if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account.cancel(state.attempt.id)
+        void welcomeBackend?.account?.state().then((state) => {
+          if (state.attempt !== null && !enteredWorkspace) return welcomeBackend?.account?.cancel(state.attempt.id)
           return undefined
         }).catch(() => undefined)
       })
@@ -1201,7 +1222,7 @@ async function main(): Promise<void> {
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
+    if (!intranet && !enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
       // A later login must retain its own activation policy instead of replaying startup focus.
       raiseAfterUpdate = false
       await showWelcome()
@@ -1253,7 +1274,7 @@ async function main(): Promise<void> {
     mandatoryUI?.dispose()
     void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), backend.close(),
       // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
-      platformView.dispose().catch((error: unknown) => { console.error(error) })])
+      platformView?.dispose().catch((error: unknown) => { console.error(error) })])
       .catch((error: unknown) => { console.error(error) }).finally(() => { app.quit() })
   }
   app.on('before-quit', (event) => {
@@ -1266,7 +1287,7 @@ async function main(): Promise<void> {
       updateDialog.dispose()
       mandatoryUI?.dispose()
       // Installation preparation already awaited Platform storage cleanup.
-      void platformView.dispose().catch((error: unknown) => { console.error(error) })
+      void platformView?.dispose().catch((error: unknown) => { console.error(error) })
       return
     }
     if (quitting) return
@@ -1281,10 +1302,8 @@ async function main(): Promise<void> {
   })
 
   mainWindow = createMainWindow()
-  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
-  if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
-  const policyInput: unknown = app.isPackaged
+  const policyInput: unknown = intranet ? undefined : app.isPackaged
     ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
     : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown
   const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)

@@ -11,6 +11,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-config-editor'
 
 declare module '@deepseek-ai/cordis' {
@@ -22,10 +23,10 @@ declare module '@deepseek-ai/cordis' {
 
 /** Default model selection supplied by plugin configuration. */
 export interface Config {
-  /** Registered provider route. */
-  provider: Volatile<string>
-  /** Provider-owned model id. */
-  model: Volatile<string>
+  /** Registered provider route; omit together with model for no default. */
+  provider: Volatile<string | undefined>
+  /** Provider-owned model id; omit together with provider for no default. */
+  model: Volatile<string | undefined>
   /** Adapter-owned reasoning effort; omission follows the provider default. */
   reasoningEffort: Volatile<string | undefined>
 }
@@ -49,25 +50,35 @@ export class AgentDefaultModelConfig extends Service {
   private saves: Promise<void> = Promise.resolve()
 
   static Config = z.object({
-    provider: z.string().required().volatile(),
-    model: z.string().required().volatile(),
+    provider: z.string().min(1).volatile(),
+    model: z.string().min(1).volatile(),
     reasoningEffort: z.string().volatile(),
   })
 
   constructor(private readonly ownerContext: Context, private config: Config) {
     super(ownerContext, 'agentDefaultModel')
+    this.currentSelection()
 
     ownerContext.inject(['settings'], (child) => { child.effect(() => child.settings.configure({ auto: false }, ownerContext.fiber)) })
   }
 
   /**
    * Read the current default model selection.
-   * @returns a detached provider, model, and optional reasoning selection.
+   * @returns a detached selection, or null for no default or an official route in intranet mode.
+   * @throws when provider and model are not configured together.
    */
-  currentSelection(): ModelSelection {
+  currentSelection(): ModelSelection | null {
+    const provider = this.config.provider.get()
+    const model = this.config.model.get()
+    if (provider === undefined && model === undefined) return null
+    if (provider === undefined || model === undefined) {
+      throw new Error('agent-default-model: provider and model must be configured together')
+    }
+    if (distributionModeOf(this.ctx) === 'intranet'
+      && (provider === 'deepseek-account' || provider === 'deepseek-official')) return null
     const reasoningEffort = this.config.reasoningEffort.get()
     return selection({
-      provider: this.config.provider.get(), model: this.config.model.get(),
+      provider, model,
       ...reasoningEffort === undefined ? {} : { reasoningEffort },
     })
   }

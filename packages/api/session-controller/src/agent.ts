@@ -9,12 +9,14 @@ import type {
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
+import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
 import type { ModelSelection } from './types.ts'
+import { modelAvailable } from './catalog.ts'
 
 /** Cold Session identity absent from persistence. */
 export class ApiSessionNotFound extends Error {}
@@ -58,7 +60,8 @@ export class ApiSessionPresetConflict extends Error {
 }
 
 /** Failures produced while resolving one ordinary Session identity to its live Agent. */
-export type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'session/writer-held' | 'gateway/internal'>
+export type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'session/writer-held'
+  | 'session/model-required' | 'session/model-unavailable' | 'gateway/internal'>
 
 /** Result of resolving one ordinary Session identity to its live Agent. */
 export type ApiSessionAgentResult =
@@ -66,7 +69,7 @@ export type ApiSessionAgentResult =
   | { readonly error: ApiSessionAgentError }
 
 type InstalledSelection = ModelSelectionRef & {
-  current: AgentModelSelection
+  current: AgentModelSelection | undefined
   consume(provider: string, model: string, reasoningEffort: string | undefined): boolean
 }
 
@@ -165,10 +168,11 @@ export class ApiSessionAgentController {
   /**
    * Resolve or resume one ordinary Session, deduplicating concurrent resumes.
    * @param sessionId - ordinary Session identity.
+   * @param beforeStart - optional validated selection commit before a cold Agent starts restored work.
    * @returns the live Agent or a stable Session-domain failure.
    */
-  async resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult> {
-    return this.resolve(sessionId)
+  async resolveAgent(sessionId: SessionId, beforeStart?: (agent: Agent) => void): Promise<ApiSessionAgentResult> {
+    return this.resolve(sessionId, undefined, beforeStart)
   }
 
   /**
@@ -183,6 +187,7 @@ export class ApiSessionAgentController {
   private async resolve(
     sessionId: SessionId,
     observation?: SessionObservation,
+    beforeStart?: (agent: Agent) => void,
   ): Promise<ApiSessionAgentResult> {
     const live = this.liveAgent(sessionId)
     if (live !== undefined) return live
@@ -193,7 +198,7 @@ export class ApiSessionAgentController {
 
     let resume = this.resumes.get(sessionId)
     if (resume === undefined) {
-      resume = this.resume(sessionId, observation).finally(() => { this.resumes.delete(sessionId) })
+      resume = this.resume(sessionId, observation, beforeStart).finally(() => { this.resumes.delete(sessionId) })
       this.resumes.set(sessionId, resume)
     }
     try {
@@ -203,6 +208,10 @@ export class ApiSessionAgentController {
       const published = this.liveAgent(sessionId)
       return published ?? { agent }
     } catch (error: unknown) {
+      const remote = remoteErrorOf(error)
+      if (remote?.code === 'session/model-required' || remote?.code === 'session/model-unavailable') {
+        return { error: error as RemoteError<'session/model-required' | 'session/model-unavailable'> }
+      }
       if (error instanceof ApiSessionNotFound) {
         return { error: new RemoteError('session/not-found', error.message, { sessionId }) }
       }
@@ -292,10 +301,10 @@ export class ApiSessionAgentController {
       : agentModelSelection(projectionState.pending)
     const defaultModel = this.ctx.agentDefaultModel
     const selection: InstalledSelection = {
-      get current(): AgentModelSelection {
+      get current(): AgentModelSelection | undefined {
         if (picked !== undefined) return picked
         const loggedHeader = agent.session.requestHeader()
-        if (loggedHeader === undefined) return defaultModel.currentSelection()
+        if (loggedHeader === undefined) return defaultModel.currentSelection() ?? undefined
         const logged = loggedHeader.config
         return {
           provider: logged.provider,
@@ -404,11 +413,11 @@ export class ApiSessionAgentController {
       : { agent }
   }
 
-  private async resume(sessionId: SessionId, supplied?: SessionObservation): Promise<Agent> {
-    if (supplied !== undefined) return this.resumeObserved(sessionId, supplied)
+  private async resume(sessionId: SessionId, supplied?: SessionObservation, beforeStart?: (agent: Agent) => void): Promise<Agent> {
+    if (supplied !== undefined) return this.resumeObserved(sessionId, supplied, beforeStart)
     try {
       using observation = await this.ctx.sessionQuery.observeSession(sessionId)
-      return await this.resumeObserved(sessionId, observation)
+      return await this.resumeObserved(sessionId, observation, beforeStart)
     } catch (error: unknown) {
       if (error instanceof SessionQueryError
         && error.code === 'SESSION_QUERY_SESSION_NOT_FOUND') {
@@ -421,12 +430,16 @@ export class ApiSessionAgentController {
   private async resumeObserved(
     sessionId: SessionId,
     observation: SessionObservation,
+    beforeStart?: (agent: Agent) => void,
   ): Promise<Agent> {
     if (observation.header.id !== sessionId || observation.header.cwd === undefined) {
       throw new ApiSessionNotFound(`session "${sessionId}" not found`)
     }
     if (hasApiSessionSubagentOwner(this.ctx, { header: observation.header }, undefined)) {
       throw new ApiSessionSubagentOwnership(sessionId)
+    }
+    if (beforeStart === undefined && distributionModeOf(this.ctx) === 'intranet') {
+      await this.requireObservedModel(observation)
     }
     const composition = await this.composeAgent(this.presetForObservation(observation))
     const published = this.ctx.sessions.get(sessionId)
@@ -437,7 +450,11 @@ export class ApiSessionAgentController {
     return (await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: this.agentOptions(),
-      setup: composition.setup,
+      setup: async (agentCtx, agent) => {
+        const commit = await composition.setup(agentCtx, agent)
+        beforeStart?.(agent)
+        return commit
+      },
     })).agent
   }
 
@@ -465,11 +482,24 @@ export class ApiSessionAgentController {
         }
         const storedPreset = this.presetForObservation(observation)
         this.assertPresetUnchanged(sessionId, presetId, storedPreset)
+        const intranet = distributionModeOf(this.ctx) === 'intranet'
+        const inbox = observation.projections?.values.inbox
+        const reuseBlank = intranet && !observation.events.some(event => event.type === 'turn/start')
+          && inbox !== undefined && inbox['next-turn'].length === 0 && inbox['next-step'].length === 0
+        if (intranet && !reuseBlank) await this.requireObservedModel(observation)
         const composition = await this.composeAgent(storedPreset)
         return (await this.ctx.agents.resume({
           resumeSessionId: sessionId,
           agentOptions: this.agentOptions(),
-          setup: composition.setup,
+          setup: reuseBlank ? async (agentCtx, agent) => {
+            const commit = await composition.setup(agentCtx, agent)
+            // The writer can contain work added after the read-only observation.
+            const turn = this.ctx.sessionProjections.stateOf(agent.session, 'turnBoundary')
+            if (turn?.lastTurn !== 0 || agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) {
+              await this.requireSelectionModel(this.selectionFor(agent).current)
+            }
+            return commit
+          } : composition.setup,
         })).agent
       } catch (error: unknown) {
         if (!(error instanceof SessionQueryError)
@@ -495,8 +525,25 @@ export class ApiSessionAgentController {
   }
 
   private agentOptions(): AgentOptions {
-    const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
-    return { provider, model }
+    const selected = this.ctx.agentDefaultModel.currentSelection()
+    return selected === null ? {} : { provider: selected.provider, model: selected.model }
+  }
+
+  private async requireObservedModel(observation: SessionObservation): Promise<void> {
+    const selection = observation.projections?.values.modelSelection?.next
+      ?? this.ctx.agentDefaultModel.currentSelection()
+    await this.requireSelectionModel(selection)
+  }
+
+  private async requireSelectionModel(selection: Pick<ModelSelection, 'provider' | 'model'> | null | undefined): Promise<void> {
+    if (selection === null || selection === undefined) {
+      throw new RemoteError('session/model-required', 'Select a model before starting a model task.', {})
+    }
+    if (!await modelAvailable(this.ctx, selection)) {
+      throw new RemoteError('session/model-unavailable', 'Select an available model before starting a model task.', {
+        provider: selection.provider, model: selection.model,
+      })
+    }
   }
 
   private installSelection(agent: Agent): void {

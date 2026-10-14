@@ -77,6 +77,21 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('ModelSelect reasoning effort', () => {
+  it('guides an unconfigured workspace to model settings', () => {
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={createSnapshotStore(state({ current: null, routable: false, groups: [] }))}
+      load={vi.fn()}
+      select={vi.fn()}
+      t={t}
+    />)
+    const trigger = screen.getByRole('button', { name: '请先在设置 → 模型中添加模型提供方' })
+    expect(trigger.textContent).toBe('配置模型')
+    fireEvent.click(trigger)
+    expect(screen.getByText('没有可用模型，请在设置 → 模型中添加模型提供方')).toBeTruthy()
+  })
+
   it('renders effort names without descriptions and submits the effort as part of the session selection', async () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
     const select = vi.fn(async (selection: ModelSelection) => {
@@ -594,7 +609,7 @@ describe('ModelSelect catalog size', () => {
     render(<ModelSelect locked={false} available
       directory={createSnapshotStore(state({ groups: modelGroups(count), current: null }))}
       load={vi.fn()} select={vi.fn()} t={t} />)
-    const trigger = screen.getByRole('button', { name: '请选择模型' })
+    const trigger = screen.getByRole('button', { name: count === 0 ? '请先在设置 → 模型中添加模型提供方' : '请选择模型' })
     fireEvent.click(trigger)
     const rows = screen.queryAllByRole('menuitemradio')
     expect(rows).toHaveLength(count)

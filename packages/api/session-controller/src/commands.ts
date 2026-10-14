@@ -1,6 +1,7 @@
 /** Session commands whose activation policy is explicit at each Remote method. */
 
 import { modelAvailable } from './catalog.ts'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -149,40 +150,54 @@ export class SessionCommandController {
    * @returns the normalized selection installed for the Session, without waiting for default persistence.
    */
   async selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
-    const agent = await this.resolveAgent(request.sessionId)
-    return this.agents.serializeImageAdmission(agent, async () => {
-      try {
-        await this.requireModel(request)
-        const resolved = await this.ctx.llm.resolveCallConfig({
-          provider: request.provider,
-          model: request.model,
-          ...(request.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: ReasoningEffortId(request.reasoningEffort) }),
+    try {
+      let initialized: Agent | undefined
+      let validated: AgentModelSelection | undefined
+      let agent: Agent
+      if (distributionModeOf(this.ctx) === 'intranet') {
+        validated = await this.resolveModelSelection(request)
+        const selected = validated
+        const found = await this.agents.resolveAgent(request.sessionId, (starting) => {
+          this.agents.selectForNextRequest(starting, selected)
+          initialized = starting
         })
-        const selected: AgentModelSelection = {
-          provider: resolved.provider,
-          model: resolved.model,
-          ...(resolved.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: resolved.reasoningEffort }),
-        }
-        this.agents.selectForNextRequest(agent, selected)
+        if ('error' in found) throw found.error
+        agent = found.agent
+      } else {
+        agent = await this.resolveAgent(request.sessionId)
+      }
+      return await this.agents.serializeImageAdmission(agent, async () => {
+        const selected = validated ?? await this.resolveModelSelection(request)
+        if (initialized !== agent) this.agents.selectForNextRequest(agent, selected)
         void this.ctx.agentDefaultModel.saveSelection(selected).catch((error: unknown) => {
           this.ctx.logger.warn(
             `session-controller: model selection changed for the Session but the default was not saved: ${String(error)}`,
           )
         })
         return { selected: { ...selected } }
-      } catch (error) {
-        if (remoteErrorOf(error) !== undefined) throw error
-        throw new RemoteError(
-          'session/model-unavailable',
-          error instanceof Error ? error.message : String(error),
-          { provider: request.provider, model: request.model },
-        )
-      }
+      })
+    } catch (error) {
+      if (remoteErrorOf(error) !== undefined) throw error
+      throw new RemoteError(
+        'session/model-unavailable',
+        error instanceof Error ? error.message : String(error),
+        { provider: request.provider, model: request.model },
+      )
+    }
+  }
+
+  private async resolveModelSelection(request: SessionSelectModelRequest): Promise<AgentModelSelection> {
+    await this.requireModel(request)
+    const resolved = await this.ctx.llm.resolveCallConfig({
+      provider: request.provider,
+      model: request.model,
+      ...(request.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(request.reasoningEffort) }),
     })
+    return {
+      provider: resolved.provider,
+      model: resolved.model,
+      ...(resolved.reasoningEffort === undefined ? {} : { reasoningEffort: resolved.reasoningEffort }),
+    }
   }
 
   /**
@@ -266,7 +281,7 @@ export class SessionCommandController {
     const childId = brandString<SessionId>(`session-${randomUUID()}`)
     const composition = await this.agents.composeAgent(this.agents.presetForObservation(source))
     try {
-      const { provider, model } = this.ctx.agentDefaultModel.currentSelection()
+      const selection = this.ctx.agentDefaultModel.currentSelection()
       await this.ctx.agents.create({
         sessionId: childId,
         seed,
@@ -279,7 +294,7 @@ export class SessionCommandController {
             ? {}
             : { agentPreset: composition.agentPreset }),
         },
-        agentOptions: { provider, model },
+        agentOptions: selection === null ? {} : { provider: selection.provider, model: selection.model },
         setup: composition.setup,
       })
     } catch (error) {
@@ -336,8 +351,12 @@ export class SessionCommandController {
     const hasImage = request.content.some(part => part.type === 'image')
     const admit = async (): Promise<SessionPromptValue> => {
       try {
+        const current = this.agents.selectionFor(agent).current
+        if (current === undefined) {
+          throw new RemoteError('session/model-required', 'Select a model before sending a message.', {})
+        }
+        if (distributionModeOf(this.ctx) === 'intranet') await this.requireModel(current)
         if (hasImage) {
-          const current = this.agents.selectionFor(agent).current
           const model = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
           if (model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
             throw new RemoteError(
@@ -373,7 +392,8 @@ export class SessionCommandController {
       }
       return { accepted: true }
     }
-    return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+    return hasImage || distributionModeOf(this.ctx) === 'intranet'
+      ? this.agents.serializeImageAdmission(agent, admit) : admit()
   }
 
   private async requireModel(selection: Pick<AgentModelSelection, 'provider' | 'model'>): Promise<void> {

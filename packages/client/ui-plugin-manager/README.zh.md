@@ -37,6 +37,8 @@ kind: "package-reference"
 
 ### 安装一个组合包
 
+内网模式下，对话框提供显式内网安装源、本地离线安装和自定义安装源地址。它忽略已记住的公网 npm 源，不探测公网源，并在输入框旁说明来源被拒绝的原因。已安装插件列表和本地安装仍然可用。下述公网源选择规则仅适用于标准模式。
+
 首次使用时，如果未显式配置安装源、pnpm 使用官方 npm 源，且列表提供 npmmirror，Host 会并发探测这两个源，选择最先成功响应 HTTPS ping 的源。已记住的选择、用户手选、管理器显式配置，以及自定义或未知的 pnpm 源均保留。在初次探测期间点击安装会等待这次有时限的操作；迟到结果不会覆盖手选或重新打开已关闭的对话框。
 
 Host 通过普通 fetch 代理向 `https://registry.npmjs.org/-/ping` 和 `https://registry.npmmirror.com/-/ping` 发送 GET 请求，以最先返回 2xx 的源为结果；重定向和失败不参与选择。随后取消另一条请求、丢弃两个响应体，并在清理完成后返回。默认时限为 1500 毫秒，包括不可用结果在内的探测结果均缓存五分钟。在 `ui-plugin-manager` 上配置 `registryProbeTimeoutMs` 和 `registryProbeCacheTtlMs`；`registryProbeEnabled: false` 关闭探测。两条请求都失败或超时时保留现有默认源。不使用 IP 地区服务，也不发送 Session 内容。

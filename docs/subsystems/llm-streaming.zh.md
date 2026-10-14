@@ -929,7 +929,7 @@ Source: [`packages/llm/deepseek-llm-api-extensions/src/index.ts`](../../packages
 
 ### `ctx.llm` — `LlmRuntime`
 
-The abstract `llm` service: an adapter registry plus a streaming model-call API, interceptable via the `llm/stream` waterfall.
+Adapter registry and model-call service, interceptable through the `llm/stream` waterfall.
 
 ```ts cordis-catalog
 /**
@@ -1026,8 +1026,8 @@ fileRequestText(ref: FileAttachmentRef): string
 
 /**
  * Discover models advertised by one registered provider. Catalog membership
- * does not constrain core routing. Catalog-driven entry points may restrict
- * selection and submission to the advertised models.
+ * constrains execution when `requireAvailableModel` is enabled. Other
+ * entry points may independently restrict selection to advertised models.
  * @param provider - registered provider route to inspect.
  * @returns detached model metadata in adapter-preferred order.
  */

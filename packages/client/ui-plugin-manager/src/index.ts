@@ -1,6 +1,7 @@
 /** Host registry-response probing for the plugin installation dialog. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -50,7 +51,7 @@ export default class PluginRegistryProbe extends TypertRemoteService {
   @Remote
   async fastest(): Promise<string | null> {
     this.lifetime.signal.throwIfAborted()
-    if (!this.config.registryProbeEnabled) return null
+    if (distributionModeOf(this.ctx) === 'intranet' || !this.config.registryProbeEnabled) return null
     if (this.cached !== undefined && this.cached.expiresAt > Date.now()) return this.cached.registry
     this.pending ??= this.probe().finally(() => { this.pending = undefined })
     return this.pending

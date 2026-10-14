@@ -155,6 +155,32 @@ describe('sortPackages', () => {
 })
 
 describe('PluginManagerController', () => {
+  it('replaces a remembered public source with the configured intranet registry', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => JSON.stringify({ kind: 'custom', url: OFFICIAL }),
+      setItem: vi.fn(), removeItem: vi.fn(),
+    })
+    try {
+      const registries = { intranet: true, registry: CORP, fallbackRegistries: [], resolved: null }
+      const { face, state, probe } = bench({ registries: vi.fn().mockResolvedValue(ok(registries)) })
+      face.openInstall()
+      await vi.waitFor(() => { expect(state().install.registry).toEqual({ kind: 'offered', registry: CORP }) })
+      expect(probe.fastest).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('offers offline and explicit intranet sources without probing public registries', async () => {
+    const registries = { intranet: true, registry: CORP, fallbackRegistries: [], resolved: null }
+    const { face, state, probe } = bench({ registries: vi.fn().mockResolvedValue(ok(registries)) })
+    face.openInstall()
+    await vi.waitFor(() => { expect(state().install.registries).toEqual(registries) })
+    expect(state().install.registry).toEqual({ kind: 'offered', registry: CORP })
+    expect(offeredRegistries(registries)).toEqual([CORP, null])
+    expect(probe.fastest).not.toHaveBeenCalled()
+  })
+
   it.each(['before', 'after'] as const)('closes immediately and retries an early cancellation when acceptance arrives %s its reply', async (order) => {
     const install = deferred<ReturnType<typeof ok<ChangeResult>>>()
     const firstCancel = deferred<ReturnType<typeof ok<{ status: 'not-running' }>>>()

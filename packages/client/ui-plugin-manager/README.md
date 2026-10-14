@@ -37,6 +37,8 @@ The **Refresh** button shows its tooltip after 500 ms of hovering or keyboard fo
 
 ### Installing a bundle
 
+In intranet mode, the dialog offers the explicit intranet registry, local offline installation, and a custom registry address. It ignores remembered public npm sources, skips public registry probes, and explains refused sources beside the input. The installed plugin list and local installation remain available. The following public-source selection rules apply only to standard mode.
+
 On first use, when pnpm uses the unconfigured official npm registry and npmmirror is offered, the Host probes both registries in parallel. The first successful HTTPS ping response selects the initial source. The dialog preserves remembered choices, manual selections, explicit manager configuration, and custom or unknown pnpm registries. An install clicked during initial probing waits for that bounded operation; a late result cannot overwrite a manual choice or reopen a closed dialog.
 
 The Host sends GET requests to `https://registry.npmjs.org/-/ping` and `https://registry.npmmirror.com/-/ping` through its normal fetch proxy. A 2xx response wins; redirects and failures do not. The remaining request is cancelled, both response bodies are discarded, and cleanup completes before the result returns. The default deadline is 1500 ms and results, including unavailable results, are cached for five minutes. Configure `registryProbeTimeoutMs` and `registryProbeCacheTtlMs` on `ui-plugin-manager`; `registryProbeEnabled: false` disables probing. If both requests fail or time out, the existing default remains selected. No IP-location service or Session content is involved.

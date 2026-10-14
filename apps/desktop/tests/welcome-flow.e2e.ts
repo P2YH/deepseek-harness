@@ -6,7 +6,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, assert, describe, expect, it, vi } from 'vitest'
 import { DesktopHostProcess } from '../src/host-process.ts'
 import { DesktopProjectManager } from '../src/project-manager.ts'
 import { resolveDesktopPaths } from '../src/paths.ts'
@@ -85,6 +85,7 @@ async function mockPlatform() {
 describe.skipIf(!existsSync(builtHost))('built Desktop welcome flow', () => {
   it('persists explicit API keys and browser account login independently across Host restarts', async () => {
     vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+    vi.stubEnv('DSH_DISTRIBUTION_MODE', 'standard')
     const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-welcome-'))
     let host: DesktopHostProcess | undefined
     const platform = await mockPlatform()
@@ -139,9 +140,14 @@ describe.skipIf(!existsSync(builtHost))('built Desktop welcome flow', () => {
           await response.body?.cancel()
           return fetch(new URL(response.headers.get('location')!, url), { headers: { cookie } })
         }
-        backend = await connectDesktopWelcome(url, send, () => Promise.resolve(cookie))
+        backend = await connectDesktopWelcome(url, send, () => Promise.resolve(cookie), 'standard')
       }
       const status = async () => backend.read()
+      const account = () => {
+        const current = backend.account
+        assert.isDefined(current, 'Standard distribution must provide Platform account APIs')
+        return current
+      }
       const fingerprint = (): string => createHash('sha256')
         .update(readFileSync(join(home, '.credentials.yaml'))).digest('hex')
       await restart()
@@ -157,17 +163,17 @@ describe.skipIf(!existsSync(builtHost))('built Desktop welcome flow', () => {
       expect(await status()).toMatchObject({ hasApiKey: true, localePreference: 'zh' })
       await restart()
       expect(await status()).toMatchObject({ hasApiKey: true })
-      await backend!.account.start(desktopClientMetadata('en'))
-      await expect.poll(async () => (await backend!.account.state()).attempt?.phase).toBe('waiting-browser')
+      await account().start(desktopClientMetadata('en'))
+      await expect.poll(async () => (await account().state()).attempt?.phase).toBe('waiting-browser')
       expect(new URL(platform.callback()).origin).toBe(hostOrigin)
       platform.failExchange(true)
       const failed = await fetch(platform.callback(), { redirect: 'manual' })
       expect(failed.status).toBe(204)
-      expect(await backend!.account.state()).toMatchObject({ status: 'signed-out', attempt: { phase: 'failed' } })
+      expect(await account().state()).toMatchObject({ status: 'signed-out', attempt: { phase: 'failed' } })
       expect(await status()).toMatchObject({ hasApiKey: true, loggedIn: false })
       platform.failExchange(false)
-      await backend!.account.start(desktopClientMetadata('en'))
-      await expect.poll(async () => (await backend!.account.state()).attempt?.phase).toBe('waiting-browser')
+      await account().start(desktopClientMetadata('en'))
+      await expect.poll(async () => (await account().state()).attempt?.phase).toBe('waiting-browser')
       const response = await fetch(platform.callback(), { redirect: 'manual' })
       expect(response.status).toBe(302)
       expect(response.headers.get('location')).toBe(`${platform.origin}/dsh/authorized?result=test&locale=zh_CN&login_source=desktop`)
@@ -175,13 +181,13 @@ describe.skipIf(!existsSync(builtHost))('built Desktop welcome flow', () => {
       await restart()
       expect(await status()).toMatchObject({ hasApiKey: true, loggedIn: true })
       // A failed remote logout must not block local sign-out through the real Host composition.
-      await backend!.account.signOut(desktopClientMetadata('en'))
+      await account().signOut(desktopClientMetadata('en'))
       expect(await status()).toMatchObject({ hasApiKey: true, loggedIn: false })
-      await backend!.account.start(desktopClientMetadata('en'))
-      await expect.poll(async () => (await backend!.account.state()).attempt?.phase).toBe('waiting-browser')
-      const waiting = await backend!.account.state()
+      await account().start(desktopClientMetadata('en'))
+      await expect.poll(async () => (await account().state()).attempt?.phase).toBe('waiting-browser')
+      const waiting = await account().state()
       const late = platform.callback()
-      await backend!.account.cancel(waiting.attempt!.id)
+      await account().cancel(waiting.attempt!.id)
       expect((await fetch(late, { redirect: 'manual' })).status).not.toBe(302)
       expect(await status()).toMatchObject({ loggedIn: false })
     } finally {

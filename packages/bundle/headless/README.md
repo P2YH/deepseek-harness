@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Run one task, get the final answer, and exit. The task is the command-line argument, or stdin when you omit it; the whole invocation is the smallest working example.
+Run one task, get the final answer, and exit. The task is the command-line argument, or stdin when you omit it; the whole invocation is the smallest working example. A configured default model is required; without one, the runner exits 1 before creating or adopting a Session.
 
 ### Running a one-shot task
 

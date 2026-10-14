@@ -35,7 +35,7 @@ Client journal 在发布 follow 快照、live entry 或历史页之前验证当�
 
 Client 列表行和驻留 Session 使用当前 `sessionListMetadata` 投影纠正过期的空白会话提示；最近活动时间取摘要时间戳与投影中最后一次用户提示词时间的较晚值。当 SessionManager 在列表行到达前创建实例时，会使用已保留的该 Session 元数据对账空白状态。因此，即使旧列表响应仍将已有对话标为空白，新会话操作也不会复用已经打开过的对话。
 
-显式 ID 的 `session.create` 会收养活动 Session，或恢复持久化 Session 并持续持有其写锁。写锁争用返回 `session/writer-held`；调用方可以尝试其他空白会话，同时保留其他失败。`session.list` 根据缓存元数据列出持久化空白会话，不打开冷日志正文。
+显式 ID 的 `session.create` 会收养活动 Session，或恢复持久化 Session 并持续持有其写锁。内网模式下，未记录轮次且没有待处理 inbox 工作的持久化空白会话可以在无模型时复用；取得写锁后会在发布之前再次检查。写锁争用返回 `session/writer-held`；调用方可以尝试其他空白会话，同时保留其他失败。`session.list` 根据缓存元数据列出持久化空白会话，不打开冷日志正文。
 
 Client 列表刷新保留未变化的行对象，并在顺序和值均相同时复用条目数组。每行的 `retainedBy` 包含正数的本地引用来源计数，Host 元数据刷新不能覆盖它们。缓存成员检查使用每次刷新构建的 ID 集合，因此对账成本随当前列表和保留缓存的规模线性增长。 Host 摘要更新会替换运行状态与 Agent 可用性；本地 create/fork 响应只补充已有行缺失的元数据。普通 Session 被移除后，仅在目录仍有子项时保留其投影 store。
 
@@ -56,7 +56,7 @@ Session 对象还承载本地提交回显：`session.beginSubmission` 在调用�
 
 Fork 复制 `atSeq` 所选的精确事件前缀，包含切点事件，允许在开放轮次内截取。子会话在合成的 fork 结果和结束事件之前记录继承标记。省略 `atSeq` 时选择最近已结束轮次及其独立尾部，在下一轮次或排队输入之前停止；不存在的事件会被拒绝。聊天操作选择已结束轮次。
 
-恢复会话时若已有写句柄占用，返回 `session/writer-held`，并携带会话 id；其他恢复失败仍返回 `gateway/internal`。
+恢复会话时若已有写句柄占用，返回 `session/writer-held`，并携带会话 id。内网模式下恢复可能以 `session/model-required` 或 `session/model-unavailable` 拒绝；其他恢复失败仍返回 `gateway/internal`。
 
 `loadThrough(seq)` 在共享目标被覆盖或加载结束前私下保留较早页面，随后把成功取得的页面按顺序作为一次前插发布。历史加载期间实时事件仍然可见。后续页面失败时保留已成功取得的部分；历史窗口被替换时丢弃被替换窗口的暂存页面。普通 `loadOlder()` 直接发布 Host 选取的一页结果。
 
@@ -80,7 +80,9 @@ Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以
 
 当 `connection`、`fs` 与 `attachments` 均被组合时，`SessionMediaReferences` 在鉴权 `connection.fetch` 通道上挂载 `GET|HEAD /api/file?path=<绝对路径>`。它通过 `ctx.fs` 读取普通文件，包括已注册工作区之外的临时路径与远程提供方中的文件。目录包含关系与 MIME 类别均不限制访问；`mime-types` 提供响应类型，未知扩展名使用 `application/octet-stream`。GET 复用 `readBytes` 执行读取前及读取中的字节限制；HEAD 只读取元数据。所有文件均使用 `ctx.attachments.imageLimits.maxImageBytes`（通常为 20 MiB）；超过此上限返回 413。响应包含完整文件，忽略 Range，并携带 `private, no-store`、`nosniff` 与沙箱 CSP，使直接打开的 HTML/SVG 无法以 API 源身份执行脚本。客户端重写位于 `ui-chat`（`AssistantMarkdown`）；音视频文件响应已可用，Markdown 音视频播放器节点仍是独立工作。
 
-GUI 模型选择要求确切提供方／模型对出现在可用目录中；不可用的选择以 `session/model-unavailable` 拒绝。提示词准入保留已保存的路由，不按目录可用性阻断发送，由请求执行报告凭据缺失或模型不可用。`initializeDefaultModel()` 在账号登录后、其他提供方均未配置 API key 时，将第一个可用账号模型保存为默认模型；凭据检查使用已配置的引用，不依赖模型是否可用。提供方没有可用模型时，初始化以 `session/provider-models-unavailable` 拒绝。可用性变化不会替换模型或改写会话选择。
+GUI 模型选择要求确切提供方／模型对出现在可用目录中；不可用的选择以 `session/model-unavailable` 拒绝。未配置默认模型时，目录的 `default` 为 `null`。没有模型时仍可创建空白 Session 和读取历史；提示词准入以 `session/model-required` 拒绝缺失的选择。标准模式在提示词准入时保留已保存的路由，不检查目录可用性，由请求执行报告凭据缺失或模型不可用。内网模式在接纳提示词或恢复冷会话工作之前验证精确选择。跟随没有可用选择的冷 Session 只读取历史；显式选择模型会在恢复工作开始之前提交替代选择。可用性变化不会替换模型或改写会话选择。
+
+在标准账号组合中，`initializeDefaultModel()` 在账号登录后、其他提供方均未配置 API key 时，将第一个可用账号模型保存为默认模型；凭据检查使用已配置的引用，不依赖模型是否可用。提供方没有可用模型时，初始化以 `session/provider-models-unavailable` 拒绝。内网模式在读取提供方配置或凭据之前，以同一错误代码拒绝此账号专用操作。
 
 `selectModel` 成功返回表示会话级模型选择已生效，不等待默认 profile 设置保存。默认设置在后台按提交顺序保存；保存失败会记录警告，并保留会话选择。新会话读取最近一次成功保存的默认值。
 

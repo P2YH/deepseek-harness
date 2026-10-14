@@ -68,6 +68,11 @@ profile 导入插件前，DSH 会检查其 `peerDependencies` 中对 `@deepseek-
 
 `sanitizeProfile(binName, profileDir, bundles)` 提供文件恢复，无需加载插件或解析 patch。Desktop 在原生致命错误恢复中调用它。调用前必须停止 profile 并排除并发 profile 写入。它将 profile 的 `cordis.patch.yml` 重命名为带唯一 `.bak-<timestamp>` 后缀的同目录备份，并恢复调用方指定的 bundle 列表，保留已安装包和其他 manifest 字段。时间戳为 Unix 毫秒数；同名备份已存在时追加序号（`-1`、`-2`、……），时间戳保持不变。返回值为备份路径；patch 不存在时返回 `undefined`，缺失的 profile 不会被创建。下次启动的 profile 初始化会重新创建空 patch。home 级 patch 不变。无效 profile JSON 在修改前报错；后续错误向调用方抛出，保留已完成的修改供重试。
 
+<a id="intranet-distribution"></a>
+### 内网发行模式
+
+GUI 启动器可选择固定的 `intranet` 模式，其优先级高于组合包、profile、主目录和命令行 patch。`readProfilePatches` 在每次重载时生成独立的生效配置树，保留磁盘上的 patch 和凭据。官方账号、模型、上传和搜索模块保持停用，官方默认模型变为空配置，LLM 运行时要求模型可用。运行时 Loader 配置同样执行这些限制。标准模式和非 GUI 启动保留原有组合。部署与 API 变更参见[迁移指南](../../../docs/upgrade-guide/v0.2.0-rc.2/intranet-distribution/guide.zh.md)。
+
 ### 预览生效配置
 
 启动前，你可以打印应用将挂载的确切配置：dump 会以 `!!js` 表达式原样展示组合后的条目列表，并按注释分组标明每个源文件及其 patch 层，输出是一份可加载的 YAML 文档。未匹配到任何行的 patch 会连同其层标签一起报告；配置缺失、无法解析或字段无效都会使 dump 失败。

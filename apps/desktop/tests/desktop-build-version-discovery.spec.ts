@@ -35,6 +35,13 @@ describe('desktop build version discovery', () => {
       .resolves.toBe(`${PRERELEASE}.${DATE}.1`)
   })
 
+  it('uses local intranet artifacts even when stale update settings are present', async () => {
+    const artifactsRoot = await artifactsWith([`deepseek-harness-${PRERELEASE}.${DATE}.3-win-x64.exe`])
+    await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'win-x64', date: DATE, artifactsRoot,
+      environment: { DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_AUTO_UPDATE_ENV: 'invalid-unused-deployment' },
+    })).resolves.toBe(`${PRERELEASE}.${DATE}.4`)
+  })
+
   it('numbers a stable product version under the documented test prerelease', async () => {
     const artifactsRoot = await artifactsWith([`deepseek-harness-${STABLE}-test.${DATE}.4-win-x64.exe`])
     await expect(suggestDesktopBuildVersion({ productVersion: STABLE, target: 'win-x64', environment: {}, date: DATE, artifactsRoot }))

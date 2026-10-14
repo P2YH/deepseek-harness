@@ -68,6 +68,19 @@ it('requires one signing preflight before building, then records only the comple
   expect(record.publicUrl).toBe('https://updates.example.com/dsh-desk/0123456789abcdef0123456789abcdef/feeds/win-x64/')
 })
 
+it('retains signed intranet preparation and verification without creating an upload release record', async () => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['win-x64'], 'win32', 'x64'), {
+    DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_APP_ID: 'com.example.intranet',
+    DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'fixture-pin',
+  }, run)
+  expect(stages[0]).toBe('preflight:windows-signing')
+  expect(stages).toContain('run sign:primary-runtime --dsh')
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts')
+  expect(writeFileSync).not.toHaveBeenCalled()
+  expect(run.run.mock.calls.every(call => call[3].env.DSH_DISTRIBUTION_MODE === 'intranet')).toBe(true)
+})
+
 it('initializes shared storage only after acquiring the preflight stage lock', async () => {
   const { run } = supervisor()
   vi.mocked(withWindowsSigningStage).mockImplementationOnce(async (_options, operation) => {

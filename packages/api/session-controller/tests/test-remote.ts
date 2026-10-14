@@ -75,6 +75,7 @@ export interface TestSessionRemote {
   search(request: SessionSearchRequest, signal?: AbortSignal): Promise<RemoteResult<SessionSearchValue>>
   create(request: SessionCreateRequest): Promise<RemoteResult<SessionCreateValue>>
   selectModel(request: SessionSelectModelRequest): Promise<RemoteResult<SessionSelectModelValue>>
+  initializeDefaultModel(): Promise<RemoteResult<void>>
   modelCatalog(): Promise<RemoteResult<ModelCatalog>>
   rename(request: SessionRenameRequest): Promise<RemoteResult<SessionRenameValue>>
   fork(request: SessionForkRequest): Promise<RemoteResult<SessionForkValue>>
@@ -94,7 +95,7 @@ export interface TestSessionRemote {
 
 /** Dependencies and policy supplied by a Session Controller unit harness. */
 export interface TestSessionRemoteDefaults {
-  readonly defaultModelSelection: () => AgentModelSelection
+  readonly defaultModelSelection: () => AgentModelSelection | null
   readonly cwd: string
   readonly nativeOpen?: boolean
   readonly saveDefaultModelSelection?: (selection: AgentModelSelection) => void | Promise<void>
@@ -257,11 +258,11 @@ function installControllers(
     ctx.provide('llm', {
       listModels: async () => {
         const selection = defaults.defaultModelSelection()
-        return [{ id: selection.model, name: selection.model }]
+        return selection === null ? [] : [{ id: selection.model, name: selection.model }]
       },
       listProviders: () => {
         const selection = defaults.defaultModelSelection()
-        return [{ id: selection.provider, name: selection.provider }]
+        return selection === null ? [] : [{ id: selection.provider, name: selection.provider }]
       },
     } as never)
   }
@@ -361,6 +362,7 @@ export function createSessionTestRemote(
     ),
     create: request => remoteResult(() => direct.create(request)),
     selectModel: request => remoteResult(() => direct.selectModel(request)),
+    initializeDefaultModel: () => remoteResult(() => direct.initializeDefaultModel()),
     modelCatalog: () => remoteResult(() => direct.modelCatalog()),
     rename: request => remoteResult(() => direct.rename(request)),
     fork: request => remoteResult(() => direct.fork(request)),

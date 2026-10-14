@@ -83,10 +83,17 @@ export type SettingsPathOp =
   | { op: 'unset'; path: readonly string[] }
 
 /** Apply one path op to a detached section, returning the next section. */
-function applyPathOp(section: Record<string, unknown>, op: SettingsPathOp, schema: z): Record<string, unknown> {
+function applyPathOp(
+  section: Record<string, unknown>, op: SettingsPathOp, schema: z,
+  resolveExpression?: (value: unknown) => unknown,
+): Record<string, unknown> {
   const edit = (input: unknown, path: readonly string[], node?: z): unknown => {
     const [head, ...rest] = path
     if (head === undefined) return op.op === 'set' ? op.value : undefined
+    if (resolveExpression !== undefined && isPlainObject(input)
+      && Object.keys(input).length === 1 && typeof input.__jsExpr === 'string') {
+      input = resolveExpression(input)
+    }
     const value: unknown = input === undefined ? node?.meta.default : input
     if (Array.isArray(value)) {
       if (!/^(0|[1-9][0-9]*)$/.test(head) || (Number(head) > value.length || Number(head) === value.length && (rest.length > 0 || op.op === 'unset'))) {
@@ -172,12 +179,21 @@ function cloneJsonShaped(root: object): Record<string, unknown> {
  * snapshots pass {@link cloneJsonShaped}, which strips them so a sparse patch
  * cannot erase lower keys.
  */
-function mergeLayers(under: unknown, over: unknown): unknown {
+function mergeLayers(under: unknown, over: unknown, resolveExpression?: (value: unknown) => unknown): unknown {
+  // A whole-map !!js expression is intentionally kept raw in the profile so
+  // it can be re-evaluated when its injected services change. When a settings
+  // edit addresses a child of that map, materialize just this branch before
+  // merging. Untouched expression branches remain raw and round-trip exactly.
+  if (resolveExpression !== undefined && isPlainObject(under)
+    && Object.keys(under).length === 1 && typeof under.__jsExpr === 'string'
+    && isPlainObject(over)) {
+    return mergeLayers(resolveExpression(under), over, resolveExpression)
+  }
   if (!isPlainObject(under) || !isPlainObject(over)) return over
   const merged: Record<string, unknown> = { ...under }
   for (const [key, value] of Object.entries(over)) {
     Object.defineProperty(merged, key, {
-      value: Object.hasOwn(merged, key) ? mergeLayers(merged[key], value) : value,
+      value: Object.hasOwn(merged, key) ? mergeLayers(merged[key], value, resolveExpression) : value,
       enumerable: true, configurable: true, writable: true,
     })
   }
@@ -346,7 +362,8 @@ export class SettingsForms extends Service {
    */
   async update(ns: string, patch: object, expectedRevision?: number): Promise<void> {
     const input = cloneJsonShaped(patch)
-    await this.write(ns, current => mergeLayers(current, input) as Record<string, unknown>, expectedRevision)
+    await this.write(ns, (current, _base, _schema, resolveExpression) =>
+      mergeLayers(current, input, resolveExpression) as Record<string, unknown>, expectedRevision)
   }
 
   /** Reset all live fields, then set the supplied fields; ordinary config is preserved.
@@ -356,7 +373,8 @@ export class SettingsForms extends Service {
    */
   async replace(ns: string, section: object, expectedRevision?: number): Promise<void> {
     const input = cloneJsonShaped(section)
-    await this.write(ns, (_current, base) => mergeLayers(base, input) as Record<string, unknown>, expectedRevision)
+    await this.write(ns, (_current, base, _schema, resolveExpression) =>
+      mergeLayers(base, input, resolveExpression) as Record<string, unknown>, expectedRevision)
   }
 
   /** Apply field edits without restating redacted secrets; unsetting an array index removes its element.
@@ -365,18 +383,21 @@ export class SettingsForms extends Service {
    * @param expectedRevision Revision returned by describe.
    */
   async mutate(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void> {
-    await this.write(ns, (current, base, schema) => ops.reduce((value, op) => {
-      if (op.op === 'set') return applyPathOp(value, op, schema)
+    await this.write(ns, (current, base, schema, resolveExpression) => ops.reduce((value, op) => {
+      if (op.op === 'set') return applyPathOp(value, op, schema, resolveExpression)
       const parent = op.path.slice(0, -1).reduce<unknown>((node, key) => member(node, key), value)
-      if (Array.isArray(parent)) return applyPathOp(value, op, schema)
+      if (Array.isArray(parent)) return applyPathOp(value, op, schema, resolveExpression)
       const inherited = op.path.reduce<unknown>((node, key) => member(node, key, true), base)
-      return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema)
+      return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema, resolveExpression)
     }, current), expectedRevision, ops.map(op => op.path))
   }
 
   private async write(
     ns: string,
-    change: (current: Record<string, unknown>, base: Record<string, unknown>, schema: z) => Record<string, unknown>,
+    change: (
+      current: Record<string, unknown>, base: Record<string, unknown>, schema: z,
+      resolveExpression: (value: unknown) => unknown,
+    ) => Record<string, unknown>,
     expected?: number, paths: readonly (readonly string[])[] = [],
   ): Promise<void> {
     const entry = this.ownerContext.configEditor.entries().find(row => row.options.id === ns)
@@ -395,7 +416,10 @@ export class SettingsForms extends Service {
       }
       const current = projectForm(form, raw) as Record<string, unknown>
       const base = projectForm(form, inherited) as Record<string, unknown>
-      const next = cloneJsonShaped(change(current, base, schema))
+      const fiber = entry.fiber
+      if (fiber === undefined) throw new Error(`Plugin entry "${ns}" is no longer active`)
+      const resolveExpression = (value: unknown): unknown => interpolate(fiber.ctx, value)
+      const next = cloneJsonShaped(change(current, base, schema, resolveExpression))
       const validatePaths = (value: Record<string, unknown>, node: z, path: string[] = []): void => {
         for (const [key, child] of Object.entries(value)) {
           const target = [...path, key]
@@ -417,7 +441,7 @@ export class SettingsForms extends Service {
         }
         return result
       }
-      return mergeLayers(strip(raw, form), next) as Record<string, unknown>
+      return mergeLayers(strip(raw, form), next, resolveExpression) as Record<string, unknown>
     })
     this.describe()
   }

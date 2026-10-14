@@ -4,6 +4,40 @@ import { expect, it, onTestFinished, vi } from 'vitest'
 import DefaultModel from '../src/index.ts'
 import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 
+it('keeps an empty default until the user configures a complete selection', async () => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  const live = await liveConfig(ctx, DefaultModel, {})
+  expect(ctx.agentDefaultModel.currentSelection()).toBeNull()
+  await live.replace({ provider: 'intranet', model: 'local-model' })
+  expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'intranet', model: 'local-model' })
+  await live.replace({})
+  expect(ctx.agentDefaultModel.currentSelection()).toBeNull()
+})
+
+it.each(['deepseek-official', 'deepseek-account'])('ignores %s defaults in intranet mode without changing config', async (provider) => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  const removeMode = ctx.provide('distributionMode', 'intranet')
+  const live = await liveConfig(ctx, DefaultModel, { provider, model: 'old-model' })
+  expect(ctx.agentDefaultModel.currentSelection()).toBeNull()
+  await live.replace({ provider: 'gateway', model: 'company-model' })
+  expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'gateway', model: 'company-model' })
+  await live.replace({ provider, model: 'old-model' })
+  expect(ctx.agentDefaultModel.currentSelection()).toBeNull()
+  removeMode()
+  expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider, model: 'old-model' })
+})
+
+it.each(['gateway', 'deepseek-official', 'deepseek-account'])('rejects a partially configured %s default after a live edit', async (provider) => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  ctx.provide('distributionMode', 'intranet')
+  const live = await liveConfig(ctx, DefaultModel, {})
+  await live.replace({ provider })
+  expect(() => ctx.agentDefaultModel.currentSelection()).toThrow('provider and model must be configured together')
+})
+
 it('reads complete selections from volatile config and clears omitted reasoning effort', async () => {
   const ctx = new Context()
   onTestFinished(() => ctx.fiber.dispose())
@@ -29,7 +63,7 @@ it('persists complete selections through its owning profile entry', async () => 
   onTestFinished(() => standalone.fiber.dispose())
   await standalone.plugin(DefaultModel, { provider: 'test', model: 'original' })
   await standalone.agentDefaultModel.saveSelection({ provider: 'test', model: 'ignored' })
-  expect(standalone.agentDefaultModel.currentSelection().model).toBe('original')
+  expect(standalone.agentDefaultModel.currentSelection()?.model).toBe('original')
 })
 
 it('serializes overlapping saves and continues after a rejected write', async () => {

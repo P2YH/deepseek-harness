@@ -412,15 +412,16 @@ export function ModelSelect(
   }
 
   const waiting = state.current === null && state.status === 'loading'
+  const unconfigured = state.current === null && state.status === 'ready' && choices.length === 0
   const modelLabel = waiting
     ? t('trigger.loading')
     : currentChoice?.model.name
-      ?? (state.current === null ? t('trigger.fallback') : `${state.current.provider}/${state.current.model}`)
+      ?? (state.current === null ? t(unconfigured ? 'trigger.configure' : 'trigger.fallback') : `${state.current.provider}/${state.current.model}`)
   const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
   const triggerAria = waiting
     ? t('trigger.loading')
     : state.current === null
-      ? t('trigger.selectAria')
+      ? t(unconfigured ? 'trigger.configureHint' : 'trigger.selectAria')
       : effortLabel === undefined
         ? t('trigger.aria', { model: modelLabel })
         : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })

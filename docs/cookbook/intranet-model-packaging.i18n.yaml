@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for intranet-model-packaging.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/cookbook/intranet-model-packaging.md
+/intranet-model-packaging-and-configuration:
+  en: ac12e5bdf661acaf
+  zh: d3b200e27c1699a6
+/intranet-model-packaging-and-configuration/summary:
+  en: 24555904c62f1caa
+  zh: ece09d48b7d676c8
+/intranet-model-packaging-and-configuration/table-of-contents:
+  en: 2f2377e2886ae5ae
+  zh: 3afbaef65c470f40
+/intranet-model-packaging-and-configuration/endpoints:
+  en: 956f50326a3efe19
+  zh: e0aeabcf981fcc9c
+/intranet-model-packaging-and-configuration/packaging:
+  en: b9a91a7b76f23424
+  zh: 3696a954362e9668
+/intranet-model-packaging-and-configuration/installation-and-upgrades:
+  en: 97103ac8c9698b48
+  zh: d569d60b7c15b5c7
+/intranet-model-packaging-and-configuration/verification:
+  en: 93eaf5c10fda445d
+  zh: ad89937a805741bb
+/intranet-model-packaging-and-configuration/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

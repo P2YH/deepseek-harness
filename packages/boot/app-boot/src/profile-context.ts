@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { composeEntries, loadProfileDirectory, PROFILE_PATCH_FILENAME, type Profile } from './profile.ts'
 import { loadOptionalPatches } from './index.ts'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
+import type { DistributionMode } from '@deepseek-ai/dsh-launch-environment'
+import { applyDistributionEntries } from './distribution.ts'
 
 /** Application-owned package manager executable; environment applies only to package operations. */
 export interface ProfilePnpmInvocation {
@@ -27,6 +29,8 @@ export interface ProfileContext {
   readonly overlays: readonly PatchOptions[]
   /** Launch-time DSH_TELEMETRY_DISABLED value; any non-empty value opts out. */
   readonly telemetryDisabledEnv: string | undefined
+  /** Fixed product mode, applied above every editable profile layer. */
+  readonly distributionMode?: DistributionMode
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -71,5 +75,8 @@ export function readProfilePatches(binName: string, context: ProfileContext, ini
   const telemetryPatch = resolveTelemetryPatch(context.telemetryDisabledEnv,
     composeEntries([patches]).some(row => row.id === TELEMETRY_ROW_ID))
   if (telemetryPatch !== undefined) patches.push(telemetryPatch)
+  if (context.distributionMode === 'intranet') {
+    return [{ insert: applyDistributionEntries(composeEntries([patches]), 'intranet') }]
+  }
   return patches
 }

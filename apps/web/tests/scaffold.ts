@@ -31,7 +31,8 @@ import { pathToFileURL } from 'node:url'
 import type { Page } from 'playwright'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { DSH_LAUNCH_ENVIRONMENT_KEY, type DistributionMode, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { installDistributionPolicy } from '@deepseek-ai/dsh-app-boot'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { entryListSchema, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import yaml from 'js-yaml'
@@ -304,6 +305,8 @@ export interface WebScaffold {
 
 /** Options for {@link launchWebScaffold}. */
 export interface LaunchOptions {
+  /** Fixed GUI distribution; intranet scenarios retain the shipped internal model default. */
+  distributionMode?: DistributionMode
   /** Override the developer-tools preference; omitted uses the shipped default. */
   developerTools?: boolean
   /** Enable the real Open In rows with deterministic launch-environment facts. */
@@ -568,7 +571,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ...options.profile?.hmr === false ? [{ id: 'hmr', disabled: true }] : [],
     { id: 'session-log-deepseek', config: { enabled: false } },
     { id: 'ui-plugin-manager', config: { registryProbeEnabled: false } },
-    ...mode === 'record' || options.deepSeekMissingCredential === true
+    ...mode === 'record' || options.deepSeekMissingCredential === true || options.distributionMode === 'intranet'
       ? []
       : [{ id: 'agent-default-model', config: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }],
     ...extraOverlayPatches,
@@ -697,6 +700,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // the temp workspace so tool cwd, session cwd, and fixtures agree.
   const originalCwd = process.cwd()
   const ctx = new Context()
+  ctx.provide('distributionMode', options.distributionMode ?? 'standard')
   if (options.openInAppEnvironment !== undefined) ctx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.openInAppEnvironment)
   const observedSessions = new Map<SessionId, Session>()
   const stopObservingSessions = ctx.on('session/created', (session) => {
@@ -778,6 +782,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         cwd: workspaceCwd, home: harnessHome,
         startedBundles: loadProfileDirectory('dsh', profileDir, INSTALL_ANCHOR).layers.map(layer => layer.packageName),
         overlays: processOverlays, telemetryDisabledEnv: undefined,
+        distributionMode: options.distributionMode ?? 'standard',
       }
       // HMR gates file-driven reloads on application readiness, which the
       // launcher commits after boot; this direct harness is ready at once.
@@ -800,6 +805,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       resolution,
     })
     await ctx.plugin(Loader)
+    installDistributionPolicy(ctx)
     await mountRootInclude(ctx, rootConfig, readProfilePatches('dsh', profileContext))
     await ctx.loader.await()
     await auditStartupEntries(ctx, 'web e2e scaffold')
@@ -867,7 +873,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         ...(replayChildFixtures === undefined ? {} : { childFiles: replayChildFixtures }),
         ...(options.paceMs === undefined ? {} : { paceMs: options.paceMs }),
       })
-    } else if (mode !== 'record' && options.deepSeekMissingCredential !== true) {
+    } else if (mode !== 'record' && options.deepSeekMissingCredential !== true && options.distributionMode !== 'intranet') {
       // No fixture and no shipped adapter would leave the tree with ZERO
       // provider routes — a state no product composition has, and one the
       // composer refuses to type into. Register the same routes

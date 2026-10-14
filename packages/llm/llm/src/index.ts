@@ -7,6 +7,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type {
@@ -335,11 +336,15 @@ export interface DirectoryRegistrationHandle {
   replace(entries: readonly LlmConfigurableProvider[]): void
 }
 
-/**
- * The abstract `llm` service: an adapter registry plus a streaming model-call
- * API, interceptable via the `llm/stream` waterfall.
- */
+/** Deployment policy applied before any adapter prepares or dispatches a request. */
+export interface Config {
+  /** Require the current provider catalog to advertise every requested model. */
+  requireAvailableModel?: boolean
+}
+
+/** Adapter registry and model-call service, interceptable through the `llm/stream` waterfall. */
 export class LlmRuntime extends TypertRemoteService {
+  static Config = z.object({ requireAvailableModel: z.boolean().default(false) })
   private adapters = new Map<string, AdapterRegistration>()
   private directory = new Map<string, LlmConfigurableProvider>()
   private discoveries = new Map<
@@ -347,7 +352,7 @@ export class LlmRuntime extends TypertRemoteService {
     (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>
   >()
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, private readonly config: Config = {}) {
     super(ctx, 'llm')
   }
 
@@ -694,8 +699,8 @@ export class LlmRuntime extends TypertRemoteService {
 
   /**
    * Discover models advertised by one registered provider. Catalog membership
-   * does not constrain core routing. Catalog-driven entry points may restrict
-   * selection and submission to the advertised models.
+   * constrains execution when `requireAvailableModel` is enabled. Other
+   * entry points may independently restrict selection to advertised models.
    * @param provider - registered provider route to inspect.
    * @returns detached model metadata in adapter-preferred order.
    */
@@ -934,6 +939,7 @@ export class LlmRuntime extends TypertRemoteService {
    * @returns a prepared config and its registration-bound stream entry point.
    */
   async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall> {
+    if (this.config.requireAvailableModel) await this.requireAvailableModel(config.provider, config.model)
     const registration = this.registration(config.provider)
     const adapterCall = await registration.adapter.prepareCall(config.provider, config.model, signal)
     const modelInfo = this.normalizeModelInfo(registration, config.model, adapterCall.model)
@@ -988,6 +994,12 @@ export class LlmRuntime extends TypertRemoteService {
     return registration
   }
 
+  private async requireAvailableModel(provider: string, model: string): Promise<void> {
+    if (!this.adapters.has(provider) || !(await this.listModels(provider)).some(entry => entry.id === model)) {
+      throw new LlmError('Select an available model before starting a model task.', 'MODEL_UNAVAILABLE')
+    }
+  }
+
   /** Remove replay state whose historical route is owned by another adapter. */
   private forAdapter(options: GenerateOptions, adapter: LlmAdapter): GenerateOptions {
     const messages: RequestMessage[] = options.messages.map((message) => {
@@ -1036,6 +1048,9 @@ export class LlmRuntime extends TypertRemoteService {
   ): AsyncGenerator<StreamChunk> {
     let iterator: AsyncIterator<StreamChunk>
     try {
+      if (prepared === undefined && this.config.requireAvailableModel) {
+        await this.requireAvailableModel(options.provider, options.model)
+      }
       const registration = prepared?.registration ?? this.registration(options.provider)
       const adapter = registration.adapter
       let modelInfo: LlmResolvedModelInfo
@@ -1084,6 +1099,7 @@ export class LlmRuntime extends TypertRemoteService {
         }
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
+      if (this.config.requireAvailableModel) await this.requireAvailableModel(options.provider, options.model)
       const stream = dispatch(this.forAdapter(projectedOptions, adapter))
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {

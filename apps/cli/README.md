@@ -34,6 +34,8 @@ dsh --help                          # the launcher's own help
 <a id="profiles"></a>
 ## Profiles
 
+Intranet Web profiles apply the [plugin source policy](../../packages/boot/plugin-manager/README.md#use-this-package) to `dsh plugin` as well as the running UI. The Desktop-installed command carries its packaged distribution mode into package operations and config dumps. Local or default installation stays offline without an explicit intranet registry; `exec`, `dlx`, public registries, and remote plugin sources are refused. Ordinary non-GUI CLI profiles retain standard pnpm forwarding unless an application-owned carrier fixes intranet mode.
+
 A profile directory holds a `package.json` (out-of-tree plugin dependencies plus the profile manifest `dsh.profile` with its ordered `bundles` list) and a `cordis.patch.yml` (the user's own patch layer). `dsh-hmr`, when enabled in YAML, watches the profile manifest and both profile and home patch files, then recomposes all layers through one serialized reload. Without HMR, changes apply on restart. Edits arriving during watcher registration use the same nonfatal reload reporting as later edits. [Plugin Manager](../../packages/boot/plugin-manager/README.md) shares package operations and the profile write lock with `dsh plugin`; package updates retain disabled bundle selections. CLI package commands inherit authentication variables and terminal descriptors, including interactive build approval; service calls retain their scrubbed environment and captured diagnostics.
 
 Installation and profile startup enforce declared DSH peer ranges against the same runtime version shown by `dsh --version`. Incompatible plugins require an explicitly acknowledged exact-version exemption. The [plugin manager's compatibility reference](../../packages/boot/plugin-manager/README.md#version-compatibility-and-exemptions) documents `version-exemptions`, `allow-version`, `revoke-version`, persistence, and risks.
@@ -50,6 +52,8 @@ Use `--dump-default-config` and `--dump-config` to inspect the composed tree wit
 The [CLI behavior reference](reference/README.md) owns exact layer precedence, flags, shutdown behavior, deployment defaults, and source execution. The [startup and reload failure table](../../packages/boot/app-boot/README.md#startup-and-reload-failures) compares optional and required plugin failures with configuration HMR.
 
 ## Optional overlays
+
+Export `DSH_DISTRIBUTION_MODE=intranet` in the launching environment to apply [intranet distribution](../../packages/boot/app-boot/README.md#intranet-distribution) to Web, including custom profiles that carry `@deepseek-ai/dsh-web-app`. The value is fixed at startup, cannot come from runtime `.env` files, and also applies to configuration dumps. Other profile families keep standard behavior. Windows Desktop uses its packaged mode.
 
 `config/examples/` ships opt-in overlays for GitHub review webhooks, memory MCP servers, and runtime Cordis tools. They are never part of a default profile; the [user guides](../../docs/user/guide/index.md) and [developer practice guides](../../docs/user/develop/practice/index.md) own setup and safety instructions.
 

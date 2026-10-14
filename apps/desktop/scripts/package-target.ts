@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
+import { resolveDesktopDistributionMode } from './desktop-distribution-mode.mjs'
 import {
   desktopBuildRecordFilename,
   resolveDesktopAutoUpdateConfig,
@@ -496,7 +497,9 @@ export async function packageTarget(
     await signedStage('artifacts', () => execute(desktopElectronBuilderArguments(target, invocation.directory), electronBuilderEnv))
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', ...(invocation.unsigned ? ['--unsigned'] : [])], targetEnv)
   }
-  if (!invocation.directory && !invocation.unsigned) writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+  if (!invocation.directory && !invocation.unsigned && resolveDesktopDistributionMode(environment) === 'standard') {
+    writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+  }
   if (journal) recordPackagingEvent(journal, { type: 'artifacts', directory: buildPaths.artifacts })
 }
 

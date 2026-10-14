@@ -65,6 +65,7 @@
     "@deepseek-ai/dsh-util-values": "workspace:*"
   },
   "peerDependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",
     "@deepseek-ai/dsh-host-plugin-inventory": "workspace:*",
@@ -86,6 +87,7 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/dsh-package-manifest": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",

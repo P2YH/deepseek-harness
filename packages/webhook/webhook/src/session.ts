@@ -62,6 +62,7 @@ function resolveRequest(ctx: Context, input: WebhookSessionRequest): ResolvedWeb
   let modelSelection: ModelSelection
   if (model === undefined) {
     const selected = ctx.agentDefaultModel.currentSelection()
+    if (selected === null) throw new Error('Select a default model before starting a webhook task.')
     agentOptions = { provider: selected.provider, model: selected.model }
     modelSelection = { ...selected }
   } else {

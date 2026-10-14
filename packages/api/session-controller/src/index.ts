@@ -23,7 +23,8 @@ import { SessionControlController } from './control.ts'
 import { SessionHistoryController } from './history.ts'
 import { SessionFileReferences } from './file-references.ts'
 import { ApiSessionList } from './list.ts'
-import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
+import { buildModelCatalog, hasProviderApiKey, modelAvailable } from './catalog.ts'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import { installModelSelectionProjection } from './model-selection-projection.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
@@ -202,6 +203,11 @@ export class SessionController extends TypertRemoteService {
     const sessionId = observation.header.id
     const task = (async () => {
       using ownedObservation = observation
+      if (distributionModeOf(this.ctx) === 'intranet') {
+        const selection = ownedObservation.projections?.values.modelSelection?.next
+          ?? this.ctx.agentDefaultModel.currentSelection()
+        if (selection === null || !await modelAvailable(this.ctx, selection)) return
+      }
       const result = await this.agents.resolveObservedAgent(ownedObservation)
       if ('error' in result) this.ctx.emit('api-session/error', sessionId, result.error.message)
     })().catch((error: unknown) => {
@@ -275,7 +281,7 @@ export class SessionController extends TypertRemoteService {
   }
 
   /**
-   * Select one Session-local model after explicitly resuming the Session; save the default in the background.
+   * Select one Session-local model and save the default in the background.
    * @param request - Session identity and requested model selection.
    * @returns the normalized selection installed for the Session, without waiting for default persistence.
    */
@@ -286,11 +292,16 @@ export class SessionController extends TypertRemoteService {
 
   /**
    * Select the first available account model after login when no provider API key is configured.
+   * Intranet mode rejects this account-only operation before reading provider credentials.
    * @returns after saving the first available model or retaining the existing default.
    */
   @Remote
   async initializeDefaultModel(): Promise<void> {
     const provider = 'deepseek-account'
+    if (distributionModeOf(this.ctx) === 'intranet') {
+      throw new RemoteError('session/provider-models-unavailable',
+        'Account model initialization is unavailable in intranet mode.', { provider })
+    }
     if (await hasProviderApiKey(this.ctx)) return
     const catalog = await buildModelCatalog(this.ctx)
     const model = catalog.groups.find(group => group.id === provider)?.models[0]

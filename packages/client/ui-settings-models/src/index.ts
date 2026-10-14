@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import { type Config, ONBOARDING_CONFIG_GLOBAL } from './onboarding-config.ts'
 
 export { Config } from './onboarding-config.ts'
@@ -16,7 +17,7 @@ export function apply(ctx: Context, config: Config): void {
     table.push({
       kind: 'global',
       name: ONBOARDING_CONFIG_GLOBAL,
-      value: { credentialOnboarding: config.credentialOnboarding },
+      value: { credentialOnboarding: config.credentialOnboarding, distributionMode: distributionModeOf(ctx) },
     })
   })
 }

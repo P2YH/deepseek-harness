@@ -820,7 +820,7 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
 
 /**
- * Select one Session-local model after explicitly resuming the Session; save the default in the background.
+ * Select one Session-local model and save the default in the background.
  * @param request - Session identity and requested model selection.
  * @returns the normalized selection installed for the Session, without waiting for default persistence.
  */
@@ -828,6 +828,7 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 
 /**
  * Select the first available account model after login when no provider API key is configured.
+ * Intranet mode rejects this account-only operation before reading provider credentials.
  * @returns after saving the first available model or retaining the existing default.
  */
 @Remote async initializeDefaultModel(): Promise<void>

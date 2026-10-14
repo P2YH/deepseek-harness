@@ -83,6 +83,63 @@ async function fixture(reload: 'live' | 'startup' = 'live', overlay = false, pre
   return { ctx, dir, manager: ctx.pluginManager, bundle, profile, stopHmr, overlays, connection }
 }
 
+it('refuses public and unspecified plugin sources before network or package changes in intranet mode', async () => {
+  const { manager, dir, connection } = await fixture('live', false, (ctx) => { ctx.provide('distributionMode', 'intranet') })
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
+  const view = vi.spyOn(operations, 'viewProfilePackage')
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+  onTestFinished(() => { view.mockRestore(); pnpm.mockRestore() })
+  expect(await manager.registries()).toEqual({ intranet: true, registry: null, fallbackRegistries: [], resolved: null })
+  for (const [spec, registry] of [
+    ['dsh-new', undefined],
+    ['dsh-new', 'https://registry.npmjs.org/'],
+    ['dsh-new', 'https://registry.npmmirror.com/'],
+    ['github:acme/dsh-new', 'https://npm.corp.example/'],
+    ['https://example.com/plugin.tgz', 'https://npm.corp.example/'],
+    ['dsh-new@https://example.com/plugin.tgz', 'https://npm.corp.example/'],
+    ['dsh-new@github:acme/plugin', 'https://npm.corp.example/'],
+  ] as const) {
+    const options = registry === undefined ? {} : { registry }
+    expect(await manager.inspect(spec, options)).toMatchObject({ status: 'refused', problem: 'intranet-source-required' })
+    expect(await manager.installBundle(spec, options)).toMatchObject({ application: 'failed', error: { code: 'intranet-source-required' } })
+  }
+  expect(view).not.toHaveBeenCalled()
+  expect(pnpm).not.toHaveBeenCalled()
+  expect(connection).not.toHaveBeenCalled()
+  expect(await manager.installBundle('acme/plugin', { registry: 'https://npm.corp.example/' }))
+    .toMatchObject({ application: 'failed', error: { code: 'invalid-spec' } })
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+it('uses only the explicit intranet registry when it fails', async () => {
+  const registry = 'https://npm.corp.example/'
+  const { manager } = await fixture('live', false, (ctx) => { ctx.provide('distributionMode', 'intranet') }, { registry })
+  const view = vi.spyOn(operations, 'viewProfilePackage').mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'ERR_PNPM_META_FETCH_FAIL ETIMEDOUT', timedOut: false })
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockResolvedValue({ exitCode: 1, output: 'ERR_PNPM_META_FETCH_FAIL ETIMEDOUT', truncated: false, logPath: 'unused.log', kind: 'network' })
+  onTestFinished(() => { view.mockRestore(); pnpm.mockRestore() })
+  expect(await manager.inspect('dsh-new')).toMatchObject({ status: 'refused', registries: [registry] })
+  expect(view).toHaveBeenCalledOnce()
+  expect(await manager.installBundle('dsh-new')).toMatchObject({ application: 'failed', registries: [registry] })
+  expect(pnpm).toHaveBeenCalledOnce()
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', 'dsh-new', `--registry=${registry}`])
+})
+
+it('keeps local directories and tarballs inspectable and installs offline without an intranet registry', async () => {
+  const { manager, dir } = await fixture('live', false, (ctx) => { ctx.provide('distributionMode', 'intranet') })
+  const local = join(dir, 'local-plugin')
+  mkdirSync(local)
+  writeFileSync(join(local, 'package.json'), JSON.stringify({ name: 'dsh-local', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+  const archive = join(dir, 'local-plugin.tgz')
+  writeFileSync(archive, '')
+  expect(await manager.inspect(local)).toMatchObject({ status: 'accepted', kind: 'path', registry: null })
+  expect(await manager.inspect(archive)).toMatchObject({ status: 'accepted', kind: 'tarball', registry: null })
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm').mockResolvedValue({ exitCode: 1, output: 'not cached', truncated: false, logPath: 'unused.log' })
+  onTestFinished(() => { pnpm.mockRestore() })
+  await manager.installBundle(archive)
+  expect(pnpm).toHaveBeenCalledOnce()
+  expect(pnpm.mock.calls[0]?.[1]).toEqual(['add', archive, '--offline'])
+})
+
 it.each(['network', 'timeout'] as const)('stops a GitHub %s before pnpm and attributes it to the repository', async (kind) => {
   const { manager, dir, connection } = await fixture()
   const before = readFileSync(join(dir, 'package.json'), 'utf8')

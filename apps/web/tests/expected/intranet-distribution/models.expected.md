@@ -1,0 +1,22 @@
+- dialog "Settings":
+  - navigation:
+    - text: Settings
+    - button "General"
+    - button "Models"
+    - button "Built-in plugins"
+    - button "Agent presets"
+  - button "Open configuration file"
+  - button "Close"
+  - heading "Models" [level=2]
+  - paragraph: Enter your API keys to use models from the following providers.
+  - note: "Intranet mode: official account and public companion services are disabled. Existing settings are retained."
+  - list:
+    - listitem:
+      - text: 核智 Custom
+      - img "API key missing"
+      - button "Edit 核智 (hezhi)": Edit
+    - listitem:
+      - text: 地质科技 Custom
+      - img "API key missing"
+      - button "Edit 地质科技 (dizhi)": Edit
+  - button "Add model provider"

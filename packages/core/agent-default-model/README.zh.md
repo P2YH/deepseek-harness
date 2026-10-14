@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 配置默认值
 
-组合要求提供 provider 和模型。即使没有挂载配置编辑器，消费者也可读取即时引用。
+Provider 和模型必须同时配置，也可通过 `config: {}` 同时省略，表示没有默认值。只配置其中一个字段无效。即使没有挂载配置编辑器，消费方也可读取即时引用。
 
 ```yaml
 - name: '@deepseek-ai/dsh-agent-default-model'
@@ -40,14 +40,14 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `provider` | 必填 | 新 agent 使用的已注册提供方路由 |
-| `model` | 必填 | 新 agent 使用的、由提供方持有的模型 id |
+| `provider` | 省略 | 新 agent 使用的已注册提供方路由；要求提供 `model` |
+| `model` | 省略 | 新 agent 使用的、由提供方持有的模型 id；要求提供 `provider` |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-agent-default-model) 列出所有接受的字段。`reasoningEffort` 是可选的；保存不含此字段的选择，会从 profile 的完整配置覆盖中移除此字段。
 
 ### 读取与更改默认值
 
-`currentSelection()` 为新创建的 agent 返回一份独立的 `{ provider, model, reasoningEffort? }`；`saveSelection()` 为后续 agent 保存完整选择。
+`currentSelection()` 为新创建的 agent 返回一份独立的 `{ provider, model, reasoningEffort? }`，未配置默认值时返回 `null`。在内网模式下，官方路由 `deepseek-official` 和 `deepseek-account` 也解析为 `null`，但不改变已保存配置。`saveSelection()` 为后续 agent 保存完整选择。
 
 ```text
 const selection = ctx.agentDefaultModel.currentSelection()
@@ -79,7 +79,7 @@ await ctx.agentDefaultModel.saveSelection({ provider, model, reasoningEffort: 'h
 
 ### 行为说明
 
-`currentSelection()` 返回分离的选择值。已捕获的选择保持稳定，后续操作则读取更新后的 Config 引用。
+`currentSelection()` 返回分离的选择值或 `null`。已捕获的选择保持稳定，后续操作则读取更新后的 Config 引用。
 
 </details>
 

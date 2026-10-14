@@ -8,6 +8,30 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 
+/** Product capabilities selected once by the Web or Desktop launcher. */
+export type DistributionMode = 'standard' | 'intranet'
+
+/**
+ * Parse an explicit distribution selection; an omitted value keeps the standard product.
+ * @param value - inherited launcher setting or packaged application metadata.
+ * @returns the validated distribution mode.
+ * @throws when the supplied value is not a supported mode.
+ */
+export function resolveDistributionMode(value: string | undefined): DistributionMode {
+  if (value === undefined || value === 'standard') return 'standard'
+  if (value === 'intranet') return 'intranet'
+  throw new Error('DSH_DISTRIBUTION_MODE must be standard or intranet')
+}
+
+/**
+ * Read the launcher's fixed product capabilities, independent of later environment edits.
+ * @param ctx - consuming plugin context.
+ * @returns the selected mode, or standard for compositions without a product launcher.
+ */
+export function distributionModeOf(ctx: Context): DistributionMode {
+  return ctx.get('distributionMode') ?? 'standard'
+}
+
 /**
  * Which layer supplied a value, from most to least trusted: the environment
  * this process inherited, the invoking directory's `.env`, the Harness home's
@@ -131,6 +155,8 @@ export function launchedThroughSsh(environment: LaunchEnvironmentSnapshot): bool
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
+    /** Product mode fixed by the launcher before mounting any profile plugin. */
+    distributionMode?: DistributionMode
     /** Launcher-owned snapshot of this run's environment; absent in compositions the product CLI did not boot. */
     launchEnvironment?: LaunchEnvironmentSnapshot
   }

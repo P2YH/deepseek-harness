@@ -32,6 +32,19 @@ function transport(preference?: string) {
 const url = 'http://127.0.0.1:19387/?token=fixture'
 
 describe('desktop welcome Web operations', () => {
+  it('reads language and custom-key metadata in intranet mode without an account endpoint', async () => {
+    const host = transport('zh')
+    host.namespaces.splice(0, 1)
+    const backend = await connectDesktopWelcome(url, host.send, undefined, 'intranet')
+    expect(backend.account).toBeUndefined()
+    expect(await backend.read()).toEqual({ loggedIn: false, hasApiKey: false, writable: false, localePreference: 'zh' })
+    host.keys.set('EXAMPLE_API_KEY', 'custom-key')
+    expect(await backend.read()).toMatchObject({ hasApiKey: true })
+    expect(host.send.mock.calls[0]).toEqual([url, { credentials: 'include' }])
+    expect(host.send.mock.calls.some(([input]) => input.includes('/api/account/'))).toBe(false)
+    expect(host.keys.get('EXAMPLE_API_KEY')).toBe('custom-key')
+  })
+
   it('authenticates through Web and stores only through the configured credential reference', async () => {
     const host = transport()
     const backend = await connectDesktopWelcome(url, host.send)

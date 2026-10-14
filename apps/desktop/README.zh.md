@@ -2,6 +2,14 @@
 
 [English](README.md) | 中文
 
+Windows 打包从 `.env.windows` 读取 `DSH_DISTRIBUTION_MODE=standard|intranet`，省略时使用 `standard`。打包 manifest（元数据清单）固定 `dshDistributionMode`，运行时环境变量无法改变已安装应用的模式。未打包的开发启动从启动环境读取 `DSH_DISTRIBUTION_MODE`。桌面壳把解析后的模式传给 Host 和 preload。桌面附带的 `dsh` 命令在启动 profile 或管理插件前读取同一 manifest，桌面应用关闭时也保持该模式。下文的账号和更新行为适用于标准模式。
+
+内网模式无需账号或已配置模型即可打开工作区。语言和模型密钥元数据仍通过已认证的本地 Host 提供。原生 Welcome、账号状态与失效订阅、Platform 内嵌页面、产品埋点、更新检查和“检查更新”菜单条目均停用。本地 HTTP Cookie、所属 frame 的 IPC 校验、凭据、会话和插件数据仍按现有方式处理。发送提示词前，先在设置中配置可访问的模型。
+
+Windows 内网包不嵌入更新源或强制更新策略，不要求更新服务配置，也不生成上传完成记录。自动构建编号仅读取本地产物。签名要求仍由所选的签名或未签名打包命令决定。macOS 内网打包会被拒绝。此模式不提供网络隔离，也不能使已配置的模型服务离线可用。
+
+地质科技和核智的内网端点、凭据配置、默认选择及覆盖升级，见[内网模型打包与配置](../../docs/cookbook/intranet-model-packaging.zh.md)。
+
 桌面埋点遵循[产品采集策略](../../packages/client/product-analytics/README.zh.md)及其动态应用配置，不包含 Web 使用情况。安装更新会等待该操作的本地埋点接收请求结束，再锁定 API 准入并停止 Host。接收请求的时限为一秒，失败不会阻止安装，也不等待收集端完成发送。
 
 桌面应用是完整 dsh Web 应用外的一层 Electron 壳。Electron RunAsNode 子进程启动共享 profile runner，Electron 立即从 `dsh-app://app/` 加载打包内的 Web 入口。共享加载页等待 Host 启动注入，然后在同一文档中启动客户端。Electron 将应用 HTTP 请求转发给已认证的 Web Host，转发时丢弃描述 Node fetch 连接而非资源本身的响应头（`transfer-encoding`、`connection`、`keep-alive`），并把插件 bundle 响应标记为 `no-store`，因为其每次启动都变化的 revision 只会在 Chromium 磁盘缓存中累积；WebSocket 流连接到该 Host，仅为归属的应用窗口附加凭据。Node IPC 承载启动注入、就绪与关闭。Desktop 默认使用端口 `19387`，与 Web 的 `3080` 分开；可通过 `webserver.config.port` patch 覆盖。

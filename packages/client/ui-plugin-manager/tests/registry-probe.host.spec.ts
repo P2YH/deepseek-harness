@@ -63,6 +63,14 @@ it('performs no request when disabled', async () => {
   expect(fetch).not.toHaveBeenCalled()
 })
 
+it('performs no public registry request in intranet mode even when probing is enabled', async () => {
+  const { fetch } = transport()
+  const { ctx, probe } = await mount({ registryProbeEnabled: true })
+  ctx.provide('distributionMode', 'intranet')
+  expect(await probe.fastest()).toBeNull()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
 it('ignores a faster HTTP failure and releases both response bodies', async () => {
   const { request } = transport()
   const { probe } = await mount()

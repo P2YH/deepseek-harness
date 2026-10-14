@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { resolveDistributionMode } from '@deepseek-ai/dsh-launch-environment'
 import * as desktopOffice from './office.ts'
 
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
   installOfficeEngineResolution(runtimeDir)
   const installAnchor = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
   const profile = loadProfileDirectory('dsh', projectDir, installAnchor)
+  const distributionMode = resolveDistributionMode(process.env.DSH_DISTRIBUTION_MODE)
+  process.env.DSH_DISTRIBUTION_MODE = distributionMode
   reportSkippedBundles('dsh', profile)
   const application = runProfile({
     environment: loadLayeredEnv('dsh'),
@@ -97,7 +100,7 @@ async function main(): Promise<void> {
     source: process.argv[4] ?? join(runtimeDir, '..', 'runtime', 'primary-runtime'),
     root: join(resolveDshHome(), 'dsh-runtimes', 'dsh-primary-runtime'),
   })
-  installPlatformSessionPublisher(ctx, (session) => {
+  if (distributionMode === 'standard') installPlatformSessionPublisher(ctx, (session) => {
     if (process.connected) process.send?.({ type: 'platform-session', session })
   })
   const url = ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(ctx.webServer.port)}`)

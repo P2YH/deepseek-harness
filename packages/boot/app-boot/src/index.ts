@@ -17,6 +17,8 @@ import Include, { applyEntryPatches, entryListSchema, type PatchOptions } from '
 import Group from '@deepseek-ai/cordis-plugin-group'
 import { dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { createLaunchEnvironmentSnapshot, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { installDistributionPolicy } from './distribution.ts'
+export { applyDistributionEntries, installDistributionPolicy, resolveProfileDistributionMode } from './distribution.ts'
 export { readProfilePatches, resolveTelemetryPatch, type ProfileContext, type ProfilePnpmInvocation } from './profile-context.ts'
 export { sanitizeProfile } from './profile-sanitize.ts'
 export { getDshRuntimeVersion, evaluatePluginCompatibility, pluginCompatibilityWarning, type PluginCompatibility } from './plugin-compatibility.ts'
@@ -1000,6 +1002,7 @@ export async function boot(
     }, { global: true, prepend: true })
     await ctx.plugin(Loader)
     await prepare?.(ctx)
+    installDistributionPolicy(ctx)
     stage = 'plugin tree failed to load'
     await mountRootInclude(ctx, absoluteConfigPath, patches, bareModuleBaseUrl, binName)
     // A surface can finish and dispose the whole tree while startup is still

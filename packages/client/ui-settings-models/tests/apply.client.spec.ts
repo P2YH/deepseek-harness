@@ -69,6 +69,25 @@ function declare(slots: SlotRegistry): () => void {
 }
 
 describe('ui-settings-models apply', () => {
+  it('opens the models settings without official onboarding in intranet mode', async () => {
+    const { ctx, slots } = await bench()
+    declare(slots)
+    ctx.provide('distributionMode', 'intranet')
+    try {
+      await ctx.plugin(hostPlugin, {})
+      const rows: IndexInjection[] = []
+      ctx.emit('webserver/index-inject', rows)
+      for (const row of rows) if (row.kind === 'global') vi.stubGlobal(row.name, row.value)
+      await ctx.plugin({ inject: [...inject], apply })
+      expect(slots.entries('settings.onboarding')).toEqual([])
+      const sections = slots.entries('settings.section')
+      expect(sections.map(entry => entry.options.id)).toEqual(['models'])
+      expect(sections[0]!.inject!()).toMatchObject({ intranet: true })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('keeps manual credential onboarding available when the native shell owns automatic onboarding', async () => {
     const { ctx, slots } = await bench()
     declare(slots)
@@ -77,7 +96,7 @@ describe('ui-settings-models apply', () => {
       await host.await()
       const rows: IndexInjection[] = []
       ctx.emit('webserver/index-inject', rows)
-      expect(rows).toEqual([{ kind: 'global', name: ONBOARDING_CONFIG_GLOBAL, value: { credentialOnboarding: false } }])
+      expect(rows).toEqual([{ kind: 'global', name: ONBOARDING_CONFIG_GLOBAL, value: { credentialOnboarding: false, distributionMode: 'standard' } }])
       for (const row of rows) if (row.kind === 'global') vi.stubGlobal(row.name, row.value)
       const plugin = ctx.plugin({ inject: [...inject], apply })
       await plugin.await()

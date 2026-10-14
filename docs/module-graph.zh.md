@@ -439,6 +439,8 @@ flowchart TD
   pkg_web --> pkg_llm
   pkg_attachment --> pkg_brand
   pkg_browser_use --> pkg_brand
+  pkg_client_ui_plugin_manager --> pkg_launch_environment
+  pkg_client_ui_settings_models --> pkg_launch_environment
   pkg_computer_use --> pkg_brand
   pkg_credentials --> pkg_invariants
   pkg_experimental_inspector --> pkg_client_modules
@@ -1149,6 +1151,7 @@ flowchart TD
   pkg_plugin_manager --> pkg_brand
   pkg_plugin_manager --> pkg_hmr
   pkg_plugin_manager --> pkg_host_plugin_inventory
+  pkg_plugin_manager --> pkg_launch_environment
   pkg_plugin_manager --> pkg_sandbox
   pkg_plugin_manager --> pkg_sandbox_policy
   pkg_plugin_manager --> pkg_subprocess
@@ -1434,7 +1437,6 @@ flowchart TD
 | [`client-ui-open-in-app`](../packages/client/ui-open-in-app) | `client` | — |
 | [`client-ui-permission-presets`](../packages/client/ui-permission-presets) | `client` | — |
 | [`client-ui-plan`](../packages/client/ui-plan) | `client` | — |
-| [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | `client` | — |
 | [`client-ui-primitives`](../packages/client/ui-primitives) | `client` | — |
 | [`client-ui-reference`](../packages/client/ui-reference) | `client` | — |
 | [`client-ui-renderer`](../packages/client/ui-renderer) | `client` | — |
@@ -1444,7 +1446,6 @@ flowchart TD
 | [`client-ui-settings-account`](../packages/client/ui-settings-account) | `client` | — |
 | [`client-ui-settings-agent-loop`](../packages/client/ui-settings-agent-loop) | `client` | — |
 | [`client-ui-settings-general`](../packages/client/ui-settings-general) | `client` | — |
-| [`client-ui-settings-models`](../packages/client/ui-settings-models) | `client` | — |
 | [`client-ui-settings-plugin-inventory`](../packages/client/ui-settings-plugin-inventory) | `client` | — |
 | [`client-ui-settings-plugins`](../packages/client/ui-settings-plugins) | `client` | — |
 | [`client-ui-settings-session-log`](../packages/client/ui-settings-session-log) | `client` | — |
@@ -1496,6 +1497,8 @@ flowchart TD
 | [`web`](../packages/web/web) | `web` | [`llm`](../packages/llm/llm) |
 | [`attachment`](../packages/attachment/attachment) | `attachment` | [`brand`](../packages/util/brand) |
 | [`browser-use`](../packages/browser-use/browser-use) | `browser-use` | [`brand`](../packages/util/brand) |
+| [`client-ui-plugin-manager`](../packages/client/ui-plugin-manager) | `client` | [`launch-environment`](../packages/util/launch-environment) |
+| [`client-ui-settings-models`](../packages/client/ui-settings-models) | `client` | [`launch-environment`](../packages/util/launch-environment) |
 | [`computer-use`](../packages/computer-use/computer-use) | `computer-use` | [`brand`](../packages/util/brand) |
 | [`credentials`](../packages/credentials/credentials) | `credentials` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`experimental-inspector`](../packages/experimental/inspector) | `experimental` | [`client-modules`](../packages/client/modules), [`host-webserver`](../packages/host/webserver) |
@@ -1668,7 +1671,7 @@ flowchart TD
 | [`session-query-sqlite`](../packages/session-query/session-query-sqlite) | `session-query` | [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-query`](../packages/session-query/session-query) |
 | [`tool-session-query`](../packages/session-query/tool-session-query) | `session-query` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`session-query`](../packages/session-query/session-query), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`acp`](../packages/acp/acp) | `acp` | [`agent`](../packages/core/agent), [`attachment`](../packages/attachment/attachment), [`llm`](../packages/llm/llm), [`mcp-client`](../packages/mcp/mcp-client), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`token-meter`](../packages/llm/token-meter), [`user-approval`](../packages/interaction/user-approval) |
-| [`plugin-manager`](../packages/boot/plugin-manager) | `boot` | [`brand`](../packages/util/brand), [`hmr`](../packages/boot/hmr), [`host-plugin-inventory`](../packages/host/plugin-inventory), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`user-approval`](../packages/interaction/user-approval) |
+| [`plugin-manager`](../packages/boot/plugin-manager) | `boot` | [`brand`](../packages/util/brand), [`hmr`](../packages/boot/hmr), [`host-plugin-inventory`](../packages/host/plugin-inventory), [`launch-environment`](../packages/util/launch-environment), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`subprocess`](../packages/subprocess/subprocess), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol), [`user-approval`](../packages/interaction/user-approval) |
 | [`headless`](../packages/bundle/headless) | `bundle` | [`agent`](../packages/core/agent), [`agent-default-model`](../packages/core/agent-default-model), [`fs`](../packages/fs/fs), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-query`](../packages/session-query/session-query) |
 | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | `compaction` | [`compaction`](../packages/compaction/compaction), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`token-meter`](../packages/llm/token-meter) |
 | [`experimental-browser-use-runtime`](../packages/experimental/browser-use-runtime) | `experimental` | [`agent`](../packages/core/agent), [`browser-use`](../packages/browser-use/browser-use), [`mcp-client`](../packages/mcp/mcp-client), [`scope`](../packages/core/scope), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |

@@ -50,9 +50,11 @@
   },
   "license": "MIT",
   "peerDependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-launch-environment": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-api-remotes": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",

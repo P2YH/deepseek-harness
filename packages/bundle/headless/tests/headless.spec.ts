@@ -39,6 +39,7 @@ interface ObservationStub {
 
 /** Runner invocation options layered over the scripted Agent factory. */
 interface BenchOptions {
+  noDefaultModel?: boolean
   /** Provider-resolved cwd, which can differ from the harness process directory. */
   filesystemCwd?: string
   task?: string
@@ -172,7 +173,7 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
-  await ctx.plugin(AgentDefaultModelConfig, { provider: 'test-provider', model: 'test-model' })
+  await ctx.plugin(AgentDefaultModelConfig, options.noDefaultModel === true ? {} : { provider: 'test-provider', model: 'test-model' })
   ctx.agents.setFactory({
     async createAgent(ownerCtx: Context, createOptions: CreateAgentOptions): Promise<AgentHandle> {
       const session = ctx.sessions.create(createOptions.sessionId, {
@@ -224,6 +225,20 @@ async function bench(script: Script, options: BenchOptions = {}): Promise<{
 }
 
 describe('headless runner', () => {
+  it('rejects an unset default before creating a Session', async () => {
+    let created = false
+    const test = await bench({
+      before() { created = true },
+      afterPrompt() { throw new Error('an unconfigured task must not start') },
+    }, { noDefaultModel: true })
+    try {
+      expect(await test.run()).toMatchObject({
+        code: 1, out: '', err: 'dsh: Select a default model before starting a task.\n',
+      })
+      expect(created).toBe(false)
+    } finally { await test.ctx.fiber.dispose() }
+  })
+
   it('records a fresh Session in the filesystem provider working directory', async () => {
     const cwd = '/remote/workspace'
     const test = await bench({

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { DESKTOP_IPC, type DesktopUpdateState } from '../src/ipc.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
+import { PLATFORM_IPC } from '../src/platform-ipc.ts'
 import { DesktopHostFatalError, DesktopHostUncleanExitError } from '../src/host-process.ts'
 import { en, zh } from '../src/locale.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
@@ -16,7 +17,7 @@ import { writeCrashReport } from '../src/crash-report.ts'
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 
-vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
+vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: vi.fn(async () => 'test-cookie'), serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
 // Report persistence has its own unit tests; here it resolves within microtasks so the fatal
 // dialog never outlives the test that triggered it.
 vi.mock('../src/crash-report.ts', async importOriginal => ({
@@ -49,6 +50,7 @@ const harness = await vi.hoisted(async () => {
   let quitCompleted = deferred()
   let policyBlocked = deferred()
   let embeddedPolicy: unknown
+  let embeddedMode: unknown
   let closeWindowsOnQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   let platformDisposeDeferred: ReturnType<typeof deferred> | undefined
@@ -100,7 +102,7 @@ const harness = await vi.hoisted(async () => {
     readonly setTitleBarOverlay = vi.fn()
     readonly setVibrancy = vi.fn()
     readonly setBackgroundColor = vi.fn()
-    constructor(readonly options: { show: boolean; modal?: boolean }) {
+    constructor(readonly options: { show: boolean; modal?: boolean; webPreferences?: { additionalArguments?: string[] } }) {
       super(); if (windowFailure !== undefined) throw windowFailure; windows.push(this)
     }
     isDestroyed() { return this.destroyed }
@@ -199,14 +201,14 @@ const harness = await vi.hoisted(async () => {
 
     get analyticsEnabled() { return analyticsEnabled },
     set analyticsEnabled(value: boolean) { analyticsEnabled = value; analyticsEnabledListener?.(value) },
-    watchAccount: (
+    watchAccount: vi.fn((
       listener: (state: AccountView) => void, _failed: () => void, _expired: () => void,
       onAnalyticsEnabledChanged?: (enabled: boolean) => void,
     ) => {
       analyticsEnabledListener = onAnalyticsEnabledChanged
       accountListener = listener
       return () => { accountListener = undefined; analyticsEnabledListener = undefined }
-    },
+    }),
     publishAccount(state: AccountView) { accountListener?.(state) },
     ipcOn: vi.fn<(channel: string, listener: (event: { sender: unknown; senderFrame: unknown }, ...args: unknown[]) => void) => void>(),
     get updateState() { return updateState },
@@ -229,6 +231,8 @@ const harness = await vi.hoisted(async () => {
     get policyBlocked() { return policyBlocked },
     get embeddedPolicy() { return embeddedPolicy },
     set embeddedPolicy(value: unknown) { embeddedPolicy = value },
+    get embeddedMode() { return embeddedMode },
+    set embeddedMode(value: unknown) { embeddedMode = value },
     nextNavigation() { navigated = deferred(); return navigated.promise },
     nextHostStart() { hostStarted = deferred(); return hostStarted.promise },
     deferPlatformDispose() { platformDisposeDeferred = deferred(); return platformDisposeDeferred },
@@ -259,6 +263,7 @@ const harness = await vi.hoisted(async () => {
       navigated = deferred(); dialogShown = deferred(); quitCompleted = deferred()
       policyBlocked = deferred()
       embeddedPolicy = undefined
+      embeddedMode = undefined
       platformDisposeDeferred = undefined
       platformCloseDeferred = undefined
     },
@@ -307,7 +312,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {
     if (path === join('desktop-test-app', 'package.json')) {
-      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy }))
+      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy,
+        dshDistributionMode: harness.embeddedMode }))
     }
     return encoding === undefined ? original.readFile(path) : original.readFile(path, encoding)
   }) }
@@ -417,6 +423,7 @@ beforeEach(() => {
   vi.stubEnv('DSH_DESKTOP_DEV_PROJECT_DIR', undefined)
   vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', undefined)
   vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', undefined)
+  vi.stubEnv('DSH_DISTRIBUTION_MODE', undefined)
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
   harness.analyticsEnabled = true
 })
@@ -437,6 +444,54 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it.each([true, false])('opens an intranet workspace without accounts, keys, policy or update requests (packaged=%s)', async (packaged) => {
+    harness.app.isPackaged = packaged
+    harness.embeddedMode = packaged ? 'intranet' : 'standard'
+    harness.embeddedPolicy = { invalid: 'intranet must ignore this policy' }
+    vi.stubEnv('DSH_DISTRIBUTION_MODE', packaged ? 'standard' : 'intranet')
+    vi.stubEnv('DSH_DESKTOP_MANDATORY_UPDATE_CONFIG', 'invalid-policy-json')
+    const request = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', request)
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    const host = harness.hosts[0]!
+    host.fetch.mockResolvedValueOnce(Response.json({ loggedIn: false, hasApiKey: false, writable: false, localePreference: 'zh' }))
+    host.ready.resolve()
+    await harness.windows[0]!.shown.promise
+    expect(host.environment?.DSH_DISTRIBUTION_MODE).toBe('intranet')
+    expect(harness.windows).toHaveLength(1)
+    expect(harness.windows[0]!.options.webPreferences?.additionalArguments).toContain('--dsh-distribution-mode=intranet')
+    expect(harness.watchAccount).not.toHaveBeenCalled()
+    expect(harness.handlers.has(PLATFORM_IPC.open)).toBe(false)
+    expect(harness.ipcOn.mock.calls.some(([channel]) => channel === PLATFORM_IPC.bootstrap)).toBe(false)
+    expect(applicationMenuItems().some(item => item.label === zh.checkUpdatesMenu)).toBe(false)
+    expect(await invoke(DESKTOP_IPC.updatesStatus, 'app')).toEqual({ phase: 'idle' })
+    await invoke(DESKTOP_IPC.updatesOpen, 'app')
+    harness.powerMonitor.emit('resume')
+    harness.windows[0]!.emit('focus')
+    await vi.advanceTimersByTimeAsync(3_600_000)
+    expect(harness.updateCheck).not.toHaveBeenCalled()
+    expect(request).not.toHaveBeenCalled()
+    expect(harness.analytics).not.toHaveBeenCalled()
+    const web = await import('../src/web-document.ts')
+    expect(harness.socketHeaders).toHaveBeenCalledOnce()
+    const boot = await invoke(DESKTOP_IPC.boot, 'app')
+    expect(boot).toMatchObject({ streamBaseUrl: 'http://127.0.0.1:3080' })
+    expect(web.authenticateWebHost).toHaveBeenCalledExactlyOnceWith(host.url)
+  })
+
+  it('keeps a packaged standard app standard when the parent requests intranet', async () => {
+    vi.stubEnv('DSH_DISTRIBUTION_MODE', 'intranet')
+    const host = await readyForUpdate()
+    await harness.windows[0]!.shown.promise
+    expect(host.environment?.DSH_DISTRIBUTION_MODE).toBe('standard')
+    expect(harness.watchAccount).toHaveBeenCalledOnce()
+    expect(harness.handlers.has(PLATFORM_IPC.open)).toBe(true)
+    expect(applicationMenuItems().some(item => item.label === en.checkUpdatesMenu)).toBe(true)
+  })
+
   it('routes shell update documents and assets through the registered main protocol handler', async () => {
     const root = join(import.meta.dirname, '..')
     vi.spyOn(harness.app, 'getAppPath').mockReturnValue(root)

@@ -15,6 +15,8 @@ export const zh = {
   'command.description': '选择本会话使用的模型',
   'option.loadError': '目录加载失败：{message}',
   'trigger.fallback': '请选择模型',
+  'trigger.configure': '配置模型',
+  'trigger.configureHint': '请先在设置 → 模型中添加模型提供方',
   'trigger.loading': '正在加载模型…',
   'trigger.selectAria': '请选择模型',
   'trigger.aria': '选择模型，当前 {model}',
@@ -31,7 +33,7 @@ export const zh = {
   'search.placeholder': '搜索模型…',
   'search.clear': '清除搜索',
   'search.empty': '没有匹配的模型。',
-  'empty.models': '没有可用的模型。',
+  'empty.models': '没有可用模型，请在设置 → 模型中添加模型提供方',
   'empty.efforts': '当前模型未提供推理等级。',
 } satisfies Record<string, string>
 
@@ -45,6 +47,8 @@ export const en = {
   'command.description': 'Select the model for this conversation',
   'option.loadError': 'Catalog failed to load: {message}',
   'trigger.fallback': 'Select model',
+  'trigger.configure': 'Configure a model',
+  'trigger.configureHint': 'Add a model provider in Settings → Models first',
   'trigger.loading': 'Loading models…',
   'trigger.selectAria': 'Select model',
   'trigger.aria': 'Select model, current {model}',
@@ -61,6 +65,6 @@ export const en = {
   'search.placeholder': 'Search models…',
   'search.clear': 'Clear search',
   'search.empty': 'No matching models.',
-  'empty.models': 'No models available.',
+  'empty.models': 'No models available. Add a provider in Settings → Models.',
   'empty.efforts': 'This model provides no reasoning effort levels.',
 } satisfies Record<ModelKey, string>

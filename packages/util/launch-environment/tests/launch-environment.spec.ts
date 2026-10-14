@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
   createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY, launchedThroughSsh, launchEnvironmentOf,
+  distributionModeOf, resolveDistributionMode,
 } from '../src/index.ts'
 
 const layered = createLaunchEnvironmentSnapshot([
@@ -26,6 +27,19 @@ describe('launchedThroughSsh', () => {
     ])
     expect(launchedThroughSsh(snapshot)).toBe(false)
   })
+})
+
+it('reads the fixed launcher distribution instead of later environment changes', async () => {
+  const ctx = new Context()
+  expect(resolveDistributionMode(undefined)).toBe('standard')
+  expect(resolveDistributionMode('standard')).toBe('standard')
+  expect(resolveDistributionMode('intranet')).toBe('intranet')
+  expect(() => resolveDistributionMode('')).toThrow('DSH_DISTRIBUTION_MODE')
+  expect(distributionModeOf(ctx)).toBe('standard')
+  ctx.provide('distributionMode', 'intranet')
+  vi.stubEnv('DSH_DISTRIBUTION_MODE', 'standard')
+  try { expect(distributionModeOf(ctx)).toBe('intranet') }
+  finally { vi.unstubAllEnvs(); await ctx.fiber.dispose() }
 })
 
 describe('createLaunchEnvironmentSnapshot', () => {

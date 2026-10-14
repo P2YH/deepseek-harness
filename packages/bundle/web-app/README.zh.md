@@ -44,6 +44,10 @@ dsh --profile web --no-open --port 8080
 
 已保存的模型选择覆盖组合默认值。设置卡接受兼容 Messages 的 API 地址与凭据引用。
 
+内网 Web 和 Desktop 组合通过现有 pi-ai 适配器内置 **核智**（`hezhi` / `Qwen3.6-27B`）作为组合默认模型。可编辑的 `llm-pi-ai` 条目使用 `http://10.139.133.3:8001/v1`，从 `HEZHI_API_KEY` 读取 Bearer 凭据，并通过 Chat Completions 发送 `max_completion_tokens` 和 `chat_template_kwargs.enable_thinking`。密钥通过凭据或模型设置保存，bundle 只携带引用；已保存的模型选择仍优先。已覆盖 `llm-pi-ai` 的旧 Profile 需在自身配置中补入 `hezhi` provider。上下文/输出预算 32,768/8,192 token 是临时部署配置，未经服务端核实。接口描述了图片输入，实际视觉和工具调用能力仍须在部署服务上验证。
+
+内网模型目录还内置 **地质科技**（`dizhi` / `gen-studio-Qwen3.6-27B-ygNP`），使用 `http://10.76.22.59/openai/v1`、凭据引用 `DIZHI_API_KEY`，并通过 Chat Completions 发送 `max_tokens`。增加此 provider 不改变核智默认模型。仅声明文本输入；流式输出、视觉和工具调用仍须在真实服务上验证。上下文/输出预算同样暂设为 32,768/8,192 token。已有 Profile 覆盖配置需将此 route 合并到自身 `llm-pi-ai` 配置中。
+
 ### 配置
 
 大多数用户不需要设置这些；命令行 flag 会提供给下面四个设置——`--host`、`--port` 与 `--trusted-host` 来自本次调用，`--no-open` 仅对本次调用关闭浏览器交接：

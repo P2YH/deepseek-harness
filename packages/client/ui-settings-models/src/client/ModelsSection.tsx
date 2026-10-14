@@ -39,6 +39,8 @@ import styles from './ModelsSection.module.css'
 
 /** Injected dependencies of {@link ModelsSection} (slot `inject`). */
 export interface ModelsSectionInjected {
+  /** Whether launcher policy disables official account and public companion services. */
+  intranet?: boolean
   /** The page store (loaded on mount, refreshed on pushed invalidations). */
   controller: ModelsSettingsStore
   hooks: {
@@ -221,12 +223,13 @@ export function providerCopy(template: string, target: ProviderIdentity): string
  * @returns the section, or null while the shell has not injected yet.
  */
 export function ModelsSection(props: ModelsSectionProps): ReactNode {
-  const { controller, useSnapshot, operations, schema, t, renderSlot } = props
+  const { controller, useSnapshot, operations, schema, t, renderSlot, intranet } = props
   if (
     controller === undefined || useSnapshot === undefined || operations === undefined
     || schema === undefined || t === undefined
   ) return null
-  return <Loaded injected={{ controller, useSnapshot, operations, schema, t }} renderSlot={renderSlot} />
+  const injected = { controller, useSnapshot, operations, schema, t, ...intranet === undefined ? {} : { intranet } }
+  return <Loaded injected={injected} renderSlot={renderSlot} />
 }
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
@@ -386,6 +389,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
     <div className={styles['section']}>
       <h2 className={styles['title']}>{t('title')}</h2>
       <p className={styles['intro']}>{t('intro')}</p>
+      {injected.intranet === true ? <p className={styles['notice']} role="note">{t('intranetNotice')}</p> : null}
       {!state.writable && state.status === 'ready' ? <p className={styles['notice']}>{t('readOnly')}</p> : null}
       {savedIdentity === undefined
         ? null

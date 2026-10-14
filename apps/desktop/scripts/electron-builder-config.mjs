@@ -1,4 +1,5 @@
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
+import { resolveDesktopDistributionMode } from './desktop-distribution-mode.mjs'
 import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -51,9 +52,12 @@ export function createElectronBuilderConfig(
   preparedRuntimeVersion = undefined,
 ) {
   const appId = resolveDesktopAppId(env)
-  const policy = resolveDesktopPolicyEnvironment(env)
+  const distributionMode = resolveDesktopDistributionMode(env)
+  const intranet = distributionMode === 'intranet'
+  const policy = intranet ? undefined : resolveDesktopPolicyEnvironment(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
+  if (intranet && resolvedPlatform !== 'win32') throw new Error('desktop package: intranet builds require Windows')
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
   if (env.DSH_DESKTOP_UNSIGNED !== undefined && !['0', '1'].includes(env.DSH_DESKTOP_UNSIGNED)) {
     throw new Error('desktop package: DSH_DESKTOP_UNSIGNED must be 0 or 1')
@@ -90,7 +94,7 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned || intranet ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -102,6 +106,7 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
+      dshDistributionMode: distributionMode,
       dshMandatoryUpdatePolicy: policy,
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },

@@ -283,7 +283,7 @@ function cardSeatCalls(
     ])
 }
 
-async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
+async function mountFace(scripted: ReturnType<typeof scriptedFace>, intranet = false) {
   const { face, update, mutate, set, unset } = scripted
   const ctx = ctxWith(face)
   const mirror = new SettingsDescribeMirror(ctx)
@@ -291,6 +291,7 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
   await controller.load()
   const renderSlot = stubRenderSlot()
   const injected: ModelsSectionProps = {
+    intranet,
     controller,
     useSnapshot: bindSnapshotSelector(controller.store),
     operations: operationsWith(face),
@@ -305,6 +306,11 @@ async function mountFace(scripted: ReturnType<typeof scriptedFace>) {
 async function mountSection(overrides: Parameters<typeof scriptedFace>[0] = {}) {
   return mountFace(scriptedFace(overrides))
 }
+
+it('explains retained official settings in an intranet workspace', async () => {
+  await mountFace(scriptedFace(), true)
+  expect(screen.getByRole('note').textContent).toBe(en.intranetNotice)
+})
 
 /**
  * Mount for a user who cannot reach any provider yet: no credential is stored

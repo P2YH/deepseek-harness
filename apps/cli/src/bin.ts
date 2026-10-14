@@ -11,9 +11,12 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDshArgs } from './args.ts'
 import { reportStartupFailure } from './startup-diagnostics.ts'
 import type { RunProfileOptions } from './profile-boot.ts'
+import type { DistributionMode } from '@deepseek-ai/dsh-launch-environment'
 
 /** Installation-owned dependencies supplied by a packaged CLI launcher. */
 export type RunCliOptions = Pick<RunProfileOptions, 'packageManager'> & {
+  /** Fixed product capabilities supplied by an application-owned carrier. */
+  distributionMode?: DistributionMode
   /** Permit plugin commands for Desktop's existing profile; reserved for its installed carrier. */
   manageDesktopProfile?: boolean
 }
@@ -25,7 +28,8 @@ export type RunCliOptions = Pick<RunProfileOptions, 'packageManager'> & {
  */
 export async function runCli(options: RunCliOptions = {}): Promise<void> {
   const version = getDshRuntimeVersion()
-  const { manageDesktopProfile, ...profileOptions } = options
+  const { manageDesktopProfile, distributionMode, ...profileOptions } = options
+  if (distributionMode !== undefined) process.env.DSH_DISTRIBUTION_MODE = distributionMode
   const invocation = parseDshArgs(process.argv.slice(2), version, manageDesktopProfile)
 
   switch (invocation.mode) {
@@ -49,7 +53,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<void> {
     }
     case 'plugin': {
       const { runPlugin } = await import('./plugin.ts')
-      process.exit(await runPlugin(invocation.profile, invocation.args, options.packageManager))
+      process.exit(await runPlugin(invocation.profile, invocation.args, options.packageManager, distributionMode))
       break
     }
     case 'dump-config': {

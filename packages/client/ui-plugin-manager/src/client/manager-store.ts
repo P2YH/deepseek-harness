@@ -26,7 +26,7 @@ import type {
   ReadOnlyReason,
   Registry,
 } from '@deepseek-ai/dsh-api-remotes/client'
-import { normalizeRegistry, NPMMIRROR_REGISTRY, OFFICIAL_NPM_REGISTRY, REGISTRY_URL } from '@deepseek-ai/dsh-plugin-manager/registry'
+import { isPublicRegistry, normalizeRegistry, NPMMIRROR_REGISTRY, OFFICIAL_NPM_REGISTRY, REGISTRY_URL } from '@deepseek-ai/dsh-plugin-manager/registry'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LocalizedText, PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
@@ -460,6 +460,12 @@ function specAgain(install: InstallState): InstallState {
  * longer offers is kept as a typed one.
  */
 function reconciled(remembered: RegistryChoice | null, registries: PluginRegistries): RegistryChoice {
+  if (registries.intranet === true && remembered !== null) {
+    const url = remembered.kind === 'custom' ? remembered.url : remembered.registry
+    try {
+      if (url !== null && isPublicRegistry(url)) remembered = null
+    } catch { remembered = null }
+  }
   if (remembered === null) return { kind: 'offered', registry: registries.registry }
   if (remembered.kind === 'custom' || remembered.registry === null) return remembered
   const key = registryKey(remembered.registry, registries.resolved)
@@ -684,6 +690,7 @@ export class PluginManagerController {
     const untouched = install.registry === read.choice && (install.phase === 'idle' || install.phase === 'checking')
     if (untouched) read.choice = reconciled(remembered, answer.value)
     this.patchInstall({ registries: answer.value, ...untouched ? { registry: read.choice } : {} })
+    if (answer.value.intranet === true) return
     const mirror = eligibleMirror(answer.value)
     if (!untouched || remembered !== null || mirror === undefined) return
     const fastest = await this.ctx.remote.pluginRegistryProbe.fastest()

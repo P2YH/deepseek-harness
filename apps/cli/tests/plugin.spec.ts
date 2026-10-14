@@ -120,6 +120,25 @@ it('uses the installation package runtime without changing CLI authentication or
   )
 })
 
+it.each(['web', 'test'])('passes the product-scoped mode to plugin operations for %s', async (profile) => {
+  fixture()
+  vi.stubEnv('DSH_DISTRIBUTION_MODE', 'intranet')
+  vi.mocked(runPluginCommand).mockResolvedValue({ exitCode: 0, output: '', truncated: false, logPath: '/profile/log' })
+  expect(await runPlugin(profile, ['list'])).toBe(0)
+  expect(runPluginCommand).toHaveBeenCalledWith(expect.objectContaining({
+    distributionMode: profile === 'web' ? 'intranet' : 'standard',
+  }), ['list'], expect.anything())
+})
+
+it('preserves the Desktop carrier mode independently of ambient settings and reports a source refusal', async () => {
+  const { stderr } = fixture()
+  vi.stubEnv('DSH_DISTRIBUTION_MODE', 'standard')
+  vi.mocked(runPluginCommand).mockRejectedValue(new Error('Intranet source refused'))
+  expect(await runPlugin('test', ['dlx', 'plugin'], undefined, 'intranet')).toBe(1)
+  expect(runPluginCommand).toHaveBeenCalledWith(expect.objectContaining({ distributionMode: 'intranet' }), ['dlx', 'plugin'], expect.anything())
+  expect(stderr).toHaveBeenCalledWith('dsh: Error: Intranet source refused\n')
+})
+
 it.each([
   ['list'], ['add', 'example-plugin'],
   ['version-exemptions'],
@@ -145,7 +164,7 @@ it('runs Desktop package operations under the shared writer lock with bundled pn
   const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
   const packageManager = { command: '/installation/electron', args: ['/installation/pnpm.mjs'], env: { ELECTRON_RUN_AS_NODE: '1' } }
   vi.mocked(runProfilePnpm).mockImplementation(async (context, args, options) => {
-    expect(context).toEqual({ profile: 'desktop', dir, installAnchor: '/installation/package.json', cwd: process.cwd() })
+    expect(context).toEqual({ profile: 'desktop', dir, installAnchor: '/installation/package.json', cwd: process.cwd(), distributionMode: 'standard' })
     expect(args).toEqual(['list'])
     expect(options).toMatchObject({ ...packageManager, execution: 'cli' })
     expect(existsSync(join(dir, 'package.json.lock'))).toBe(true)

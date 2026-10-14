@@ -41,6 +41,8 @@ const endpoint = launchEnvironmentOf(ctx).get('DEEPSEEK_BASE_URL')?.value
 
 ### How layers rank
 
+`resolveDistributionMode(value)` accepts `standard` or `intranet`; omission selects `standard`, and any other value throws. `distributionModeOf(ctx)` reads the launcher's fixed `distributionMode` service and defaults to `standard` in compositions without a product launcher. It never reads later environment changes. GUI policy belongs to [app-boot](../../boot/app-boot/README.md#intranet-distribution).
+
 | Layer | What it is |
 |---|---|
 | Inherited process environment | What the launching shell, CI job, or container passed in — this run's explicit intent |

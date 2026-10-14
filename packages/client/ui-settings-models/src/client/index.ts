@@ -28,7 +28,7 @@ import { createModelsOperations } from './operations.ts'
 import { createSettingsSchemaOperations } from './schema-operations.ts'
 import { en, zh, type ModelsKey } from './locales.ts'
 import { WELCOME_NOTICE_SETTINGS_NAMESPACE } from '../onboarding-copy.ts'
-import { Config, ONBOARDING_CONFIG_GLOBAL } from '../onboarding-config.ts'
+import { PageConfig, ONBOARDING_CONFIG_GLOBAL } from '../onboarding-config.ts'
 
 export type { ModelsSectionInjected, ModelsSectionProps } from './ModelsSection.tsx'
 export type { ModelsFooterOwnerProps, ProviderCardExtrasOwnerProps } from './slot-contract.ts'
@@ -78,7 +78,7 @@ export const inject = [
 export function apply(ctx: ClientContext): void {
   const page = globalThis as Partial<Record<typeof ONBOARDING_CONFIG_GLOBAL, unknown>>
   const payload = page[ONBOARDING_CONFIG_GLOBAL]
-  const configured = Config(payload === undefined ? {} : payload)
+  const configured = PageConfig(payload === undefined ? {} : payload)
   const credentialOnboarding = configured.credentialOnboarding && !('dshDesktop' in globalThis)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-models: copy dictionaries')
 
@@ -91,6 +91,7 @@ export function apply(ctx: ClientContext): void {
   // one bound translate; copy freshness rides the locale revision.
   const t = ctx.locale.bind(NS) as ModelsSectionInjected['t']
   const injected = (): ModelsSectionInjected => ({
+    intranet: configured.distributionMode === 'intranet',
     controller,
     hooks: { snapshot: controller.store },
     operations,
@@ -146,6 +147,7 @@ export function apply(ctx: ClientContext): void {
       'settings.models.footer': { kind: 'list', scope: 'root' },
     },
   }, ModelsSection))
+  if (configured.distributionMode === 'intranet') return
   if (!('dshDesktop' in globalThis)) ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',

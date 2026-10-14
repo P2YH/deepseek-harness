@@ -19,6 +19,16 @@ export const NPMMIRROR_REGISTRY = 'https://registry.npmmirror.com/'
 /** An http(s) URL, as pnpm's `--registry` takes it. */
 export const REGISTRY_URL = /^https?:\/\/\S+$/
 
+/** Whether a registry is one of the built-in public package sources.
+ * @param registry Registry URL to classify.
+ * @returns True for npm and the built-in public mirror domains.
+ * @throws When the URL cannot be parsed.
+ */
+export function isPublicRegistry(registry: string): boolean {
+  const host = new URL(registry).hostname.toLowerCase().replace(/\.$/, '')
+  return ['npmjs.org', 'npmjs.com', 'npmmirror.com', 'npm.taobao.org'].some(domain => host === domain || host.endsWith(`.${domain}`))
+}
+
 /**
  * Parse a registry URL into the form pnpm compares registries in: lower-case host, trailing slash.
  * @param url - the registry as configured or requested.

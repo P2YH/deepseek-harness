@@ -28,6 +28,19 @@ it('reads only native login API-key presence through the onboarding bridge', asy
   expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(DESKTOP_IPC.onboardingApiKey)
 })
 
+it('omits account, onboarding and mandatory-update bridges from the intranet application', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  vi.stubGlobal('process', { ...process, platform: 'win32', argv: ['desktop', '--dsh-distribution-mode=intranet'] })
+  await import('../src/preload-app.ts')
+  const names = electron.contextBridge.exposeInMainWorld.mock.calls.map(([name]): unknown => name)
+  expect(names).not.toContain('dshPlatform')
+  expect(names).not.toContain('dshOnboarding')
+  expect(names).toContain('dshDesktopBoot')
+  expect(names).toContain('__DSH_DIRECTORY_PICKER__')
+  expect(names).toContain('__DSH_LOCALE__')
+  expect(installMandatoryUpdateOverlay).not.toHaveBeenCalled()
+})
+
 it('exposes onboarding size activation to the application document', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/'))
   await import('../src/preload-app.ts')

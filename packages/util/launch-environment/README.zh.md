@@ -41,6 +41,8 @@ const endpoint = launchEnvironmentOf(ctx).get('DEEPSEEK_BASE_URL')?.value
 
 ### 各层的优先级
 
+`resolveDistributionMode(value)` 接受 `standard` 或 `intranet`；省略时选择 `standard`，其他值抛错。`distributionModeOf(ctx)` 读取启动器固定的 `distributionMode` 服务；没有产品启动器的组合默认使用 `standard`。它不读取后续环境变量变动。GUI 策略由 [app-boot](../../boot/app-boot/README.zh.md#intranet-distribution)负责。
+
 | 层 | 它是什么 |
 |---|---|
 | 继承的进程环境 | 启动 shell、CI 任务或容器传入的内容——本次运行的明确意图 |

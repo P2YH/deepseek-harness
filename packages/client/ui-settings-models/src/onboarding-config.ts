@@ -8,9 +8,15 @@ export interface Config {
   credentialOnboarding: boolean
 }
 
-/** Validate Host configuration and its public page-bootstrap payload. */
+/** Validate Host plugin configuration. */
 export const Config: z<Partial<Config>, Config> = z.object({
   credentialOnboarding: z.boolean().default(true),
+})
+
+/** Validate the public page options, including the launcher-owned distribution mode. */
+export const PageConfig = z.object({
+  credentialOnboarding: z.boolean().default(true),
+  distributionMode: z.union(['standard', 'intranet']).default('standard'),
 })
 
 /** Page-global key carrying only the public onboarding options. */

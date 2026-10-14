@@ -16,10 +16,14 @@ import { parseInstallSpec } from './install-spec.ts'
 import { awaitTreeGone, leadsOwnGroup, treeAlive, type RunTree } from './run-tree.ts'
 import { incompatiblePlugin } from './failure.ts'
 import type { IncompatiblePlugin, PackageResult, Registry } from './types.ts'
+import type { DistributionMode } from '@deepseek-ai/dsh-launch-environment'
+import { assertIntranetDependencies, intranetPnpmArguments } from './intranet.ts'
 export { setProfileVersionExemption, readProfileVersionExemptions } from '@deepseek-ai/dsh-app-boot'
 
 /** Profile and invocation locations supplied by the launcher. */
 export interface PackageOperationContext {
+  /** Fixed launcher policy; omitted for standard package operations. */
+  distributionMode?: DistributionMode
   profile: string
   /** Explicit directory for an application-owned profile; named CLI profiles resolve under home. */
   dir?: string
@@ -174,6 +178,7 @@ async function namedSpecManifest(
     return existsSync(filename) ? JSON.parse(readFileSync(filename, 'utf8')) as object : undefined
   }
   if (parsed.kind !== 'registry') return undefined
+  if (flags.includes('--offline')) return undefined
   const viewed = await execa(options.command ?? 'pnpm', [
     ...options.args ?? [], 'view', parsed.spec, 'name', 'version', 'peerDependencies', '--json',
     ...flags, '--config.fetch-retries=0',
@@ -284,6 +289,7 @@ function bundleComponentManifests(manifest: ProfileManifest, dir: string, anchor
 export async function runProfilePnpm(
   context: PackageOperationContext, args: readonly string[], options: PackageOperationOptions,
 ): Promise<PackageResult> {
+  if (context.distributionMode === 'intranet') args = intranetPnpmArguments(args, context.cwd)
   const dir = context.dir ?? resolveProfileDir(context.profile, context.home)
   // Before any profile file is read: a recorded run that is still active may be rewriting them.
   const active = await activeRecordedRun(dir)
@@ -302,6 +308,10 @@ export async function runProfilePnpm(
   const before = readProfileManifest('dsh', dir)
   const savedFiles = ['package.json', 'pnpm-lock.yaml'].map(name => ({ path: join(dir, name), text: optionalFile(join(dir, name)) }))
   const beforeDependencies = directDependencies(before)
+  if (context.distributionMode === 'intranet' && INSTALL_COMMANDS.has(args[0] ?? '') && namedSpecs(args).length === 0) {
+    try { assertIntranetDependencies(beforeDependencies, dir) }
+    catch (error) { await log.close(); throw error }
+  }
   const installedBefore = new Map(Object.keys(beforeDependencies).map(name => [name, optionalFile(join(dir, 'node_modules', name, 'package.json'))]))
   let output = Buffer.alloc(0)
   let truncated = false
@@ -334,7 +344,8 @@ export async function runProfilePnpm(
   const preflight: string[] = []
   const exemptions = readProfileVersionExemptions(dir)
   // The run's own registry flags, so the lookup asks the registry the installation will use.
-  const registryFlags = args.filter(argument => argument.startsWith('--registry='))
+  const registryFlags = args.filter(argument => argument.startsWith('--registry=')
+    || (context.distributionMode === 'intranet' && argument === '--offline'))
   for (const raw of namedSpecs(args)) {
     // A spec whose manifest cannot be read or validated is left to the run itself and to the check
     // after installation, which reports what it could not validate.
@@ -503,7 +514,9 @@ export async function runProfilePnpm(
         // from its restored manifest without creating one, which removes what this run added.
         await restore()
         const hadLockfile = savedFiles.some(file => file.path.endsWith('pnpm-lock.yaml') && file.text !== undefined)
-        const repair = ['install', hadLockfile ? '--frozen-lockfile' : '--config.lockfile=false']
+        // Recovery must retain the source restriction of the rejected operation.
+        const repair = ['install', hadLockfile ? '--frozen-lockfile' : '--config.lockfile=false',
+          ...args.filter(argument => argument === '--offline' || argument.startsWith('--registry='))]
         const repairing = execa(options.command ?? 'pnpm', [...options.args ?? [], ...repair], {
           cwd: dir, env: environment, extendEnv: false, reject: false, stdin: 'ignore',
           ...options.idleTimeoutMs === undefined ? {} : { timeout: options.idleTimeoutMs },
@@ -544,6 +557,7 @@ export async function runProfilePnpm(
 export async function runPluginCommand(
   context: PackageOperationContext, args: readonly string[], options: PackageOperationOptions,
 ): Promise<PackageResult> {
+  if (context.distributionMode === 'intranet') args = intranetPnpmArguments(args, context.cwd)
   const dir = context.dir ?? resolveProfileDir(context.profile, context.home)
   await mkdir(dir, { recursive: true })
   return withFileLock(join(dir, 'package.json'), async () => {

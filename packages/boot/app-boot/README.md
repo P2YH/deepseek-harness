@@ -68,6 +68,11 @@ Before mounting profile rows, the `dsh` launcher computes one immutable runtime 
 
 `sanitizeProfile(binName, profileDir, bundles)` provides filesystem recovery without loading plugins or parsing patches. Desktop uses it for native fatal recovery. Call it only after stopping the profile and excluding concurrent profile writes. It renames the profile’s `cordis.patch.yml` to a unique `.bak-<timestamp>` sibling and restores the supplied bundle list, preserving installed packages and other manifest fields. The timestamp is Unix time in milliseconds; collisions append an ordinal (`-1`, `-2`, …) without changing it. It returns the backup path, or `undefined` when no patch exists; missing profiles remain absent. Profile initialization recreates an empty patch on the next launch. The home-level patch is unchanged. Invalid profile JSON fails before mutation; later errors propagate and retain completed changes for retry.
 
+<a id="intranet-distribution"></a>
+### Intranet distribution
+
+GUI launchers can select the fixed `intranet` mode above bundle, profile, home and command-line patches. `readProfilePatches` derives a detached effective tree on each reload; stored patches and credentials remain intact. Official account, model, upload and search modules stay disabled, official defaults become empty, and the LLM runtime requires an available model. Runtime Loader configuration also enforces these restrictions. Standard and non-GUI launches retain their existing composition. See the [migration guide](../../../docs/upgrade-guide/v0.2.0-rc.2/intranet-distribution/guide.md) for deployment and API changes.
+
 ### Previewing the effective configuration
 
 Before you boot, you can print the exact configuration the app will mount: the dump shows the composed entry list with `!!js` expressions verbatim, grouped under comments naming each source file and the patch layers that changed it, as one loadable YAML document. Patches that match no row are reported with their layer label; a missing, unparsable, or invalid config fails the dump.

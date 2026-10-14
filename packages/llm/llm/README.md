@@ -25,9 +25,11 @@ Use `@deepseek-ai/dsh-llm` to stream model calls through configured provider ada
 <a id="use-this-package"></a>
 ## Use this package
 
-`listModels` describes models offered by catalog-driven interfaces. Core resolution and streaming can still accept unlisted ids. The GUI requires catalog membership for selection and submission; adapters intended for GUI use must implement `listModels` and advertise their available models. The base implementation returns an empty list and therefore offers no GUI models.
+`listModels` describes models offered by catalog-driven interfaces. Core resolution and streaming accept unlisted ids by default. The GUI requires catalog membership for selection; adapters intended for GUI use must implement `listModels` and advertise their available models. The base implementation returns an empty list and therefore offers no GUI models.
 
-Any composition that calls a model provider — an agent loop, a session-title generator, a compaction summarizer — streams its requests through this service. Mount it together with at least one provider adapter; the service itself has no configuration and no provider wire code.
+Any composition that calls a model provider — an agent loop, a session-title generator, a compaction summarizer — streams its requests through this service. Mount it together with at least one provider adapter; the service contains no provider wire code.
+
+`requireAvailableModel` defaults to `false`. When enabled, the runtime requires a registered provider and the exact model in its available catalog before adapter preparation and again before dispatch, including previously prepared calls and background callers. An unavailable route fails with `MODEL_UNAVAILABLE`; a catalog lookup failure also prevents the call. This setting does not restrict reading saved history.
 
 ### When to choose it
 
@@ -71,7 +73,7 @@ After a successful mount, `ctx.llm.listProviders()` reports the registered route
 
 ### Failures and recovery
 
-Every stream ends in exactly one terminal `finish` chunk: `{ kind: 'error', failure }` on failure, `{ kind: 'aborted', failure }` on cancellation. Failures carry stable codes such as `NO_ADAPTER`, `MISSING_CREDENTIAL`, `AUTH`, `RATE_LIMIT`, and `CONTEXT_WINDOW_EXCEEDED`; consumers route on the code, never on message text. `QUOTA` is provider-neutral exhaustion, while `ACCOUNT_QUOTA` is reserved for a first-party account balance that the current product can replenish. A request naming an unregistered provider fails with `NO_ADAPTER`, and a malformed credential fails with `INVALID_CREDENTIAL` instead of surfacing as an opaque fetch error. This service never re-runs a request: retrying is the job of `dsh-llm-retry` at the agent's failed-step extension point.
+Every stream ends in exactly one terminal `finish` chunk: `{ kind: 'error', failure }` on failure, `{ kind: 'aborted', failure }` on cancellation. Failures carry stable codes such as `NO_ADAPTER`, `MISSING_CREDENTIAL`, `AUTH`, `RATE_LIMIT`, and `CONTEXT_WINDOW_EXCEEDED`; consumers route on the code, never on message text. `QUOTA` is provider-neutral exhaustion, while `ACCOUNT_QUOTA` is reserved for a first-party account balance that the current product can replenish. With the default configuration, a request naming an unregistered provider fails with `NO_ADAPTER`; a malformed credential fails with `INVALID_CREDENTIAL` instead of surfacing as an opaque fetch error. This service never re-runs a request: retrying is the job of `dsh-llm-retry` at the agent's failed-step extension point.
 
 -----
 

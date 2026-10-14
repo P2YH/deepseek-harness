@@ -117,7 +117,8 @@ Manage profile files and apply their declared reload lifecycle.
 @Remote listBundles(): Promise<BundleInfo[]>
 
 /** Read the registries this manager asks: the configured first one, its fallbacks in order, and what pnpm's own configuration names.
- * @returns The registries in pnpm's comparison form; null is the one pnpm's own configuration names, `resolved` as pnpm reads it now.
+ * @returns The registries in pnpm's comparison form. In standard mode, null names pnpm's own registry, read as `resolved`.
+ * In intranet mode, only an explicit nonpublic registry is returned; null permits local offline installation and no fallback is offered.
  */
 @Remote async registries(): Promise<PluginRegistries>
 

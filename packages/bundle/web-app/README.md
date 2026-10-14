@@ -44,6 +44,10 @@ After startup you see a `dsh web:` line whose root URL carries a fresh process t
 
 Saved model selections override the composition default. The settings card accepts a Messages-compatible API address and a credential reference.
 
+Intranet Web and Desktop compositions offer **核智** (`hezhi` / `Qwen3.6-27B`) as their composition default through the existing pi-ai adapter. The editable `llm-pi-ai` entry uses `http://10.139.133.3:8001/v1`, Bearer authentication from `HEZHI_API_KEY`, and Chat Completions with `max_completion_tokens` and `chat_template_kwargs.enable_thinking`. Store the key through Credentials or Models; bundles carry only its reference. Saved selections still win. Existing profile overrides of `llm-pi-ai` need the `hezhi` provider added to their own configuration. The context/output budgets of 32,768/8,192 tokens are provisional deployment settings, not verified server limits. The interface describes image input, but live vision and tool calling require validation against the deployed service.
+
+The intranet catalog also includes **地质科技** (`dizhi` / `gen-studio-Qwen3.6-27B-ygNP`), using `http://10.76.22.59/openai/v1`, the `DIZHI_API_KEY` credential reference and Chat Completions with `max_tokens`. Adding this provider does not change the Hezhi default. Only text input is declared; streaming, vision and tool calling still require validation against the service. Its context/output budgets are also provisional at 32,768/8,192 tokens. Existing profile overrides need this route merged into their own `llm-pi-ai` configuration.
+
 ### Configuration
 
 Most users never set these; the command-line flags feed the four settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, and `--no-open` turns the browser handoff off for that invocation:

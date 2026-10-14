@@ -89,6 +89,66 @@ function fixture() {
   return { home, dir, context: { home, profile: 'test', installAnchor, cwd: home }, pnpm }
 }
 
+it.each([
+  ['exec', 'curl', 'https://example.com'], ['dlx', 'plugin'], ['update'],
+  ['add', 'github:acme/plugin'], ['add', 'plugin@https://example.com/plugin.tgz', '--registry=https://npm.corp.example/'],
+  ['add', 'plugin', '--registry=https://registry.npmjs.org/'], ['add', 'plugin'],
+  ['install', '--config.registry=https://registry.npmjs.org/'], ['install', '--offline=false'],
+])('refuses intranet pnpm arguments %j before spawning or changing a profile', async (...args) => {
+  const { context, dir } = fixture()
+  const before = readFileSync(join(dir, 'package.json'), 'utf8')
+  await expect(runProfilePnpm({ ...context, distributionMode: 'intranet' }, args, { execution: 'service', outputBytes: 1024 }))
+    .rejects.toThrow(/Intranet/)
+  expect(command.run).not.toHaveBeenCalled()
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(before)
+})
+
+it('rejects an unsupported intranet command before initializing a missing profile', async () => {
+  const { context, home } = fixture()
+  await expect(runPluginCommand({ ...context, profile: 'missing', distributionMode: 'intranet' }, ['dlx', 'plugin'], {
+    execution: 'service', outputBytes: 1024,
+  })).rejects.toThrow(/Intranet/)
+  expect(existsSync(join(home, 'profiles', 'missing'))).toBe(false)
+  expect(command.run).not.toHaveBeenCalled()
+})
+
+it.each([[], ['install'], ['remove', 'plugin'], ['add', './local-plugin']])('runs intranet local or default operation %j offline', async (...args) => {
+  const { context } = fixture()
+  expect(await runProfilePnpm({ ...context, distributionMode: 'intranet' }, args, { execution: 'service', outputBytes: 1024 }))
+    .toMatchObject({ exitCode: 0 })
+  expect(command.run).toHaveBeenCalledOnce()
+  expect(command.run.mock.calls[0]?.[1]).toContain('--offline')
+})
+
+it.each(['https://npm.corp.example/', 'http://npm.internal/'])('uses the explicit intranet registry %s for lookup and install', async (registry) => {
+  const { context, pnpm } = fixture()
+  pnpm.exitCode = 1
+  expect(await runProfilePnpm({ ...context, distributionMode: 'intranet' }, ['add', 'plugin', '--registry', registry], {
+    execution: 'service', outputBytes: 1024,
+  })).toMatchObject({ exitCode: 1 })
+  expect(command.run).toHaveBeenCalledTimes(2)
+  for (const [, args] of command.run.mock.calls) expect(args).toContain(`--registry=${registry}`)
+})
+
+it('does not perform registry lookup for an explicitly offline intranet operation', async () => {
+  const { context } = fixture()
+  await runProfilePnpm({ ...context, distributionMode: 'intranet' }, ['add', 'plugin', '--offline', '--registry=https://npm.corp.example/'], {
+    execution: 'service', outputBytes: 1024,
+  })
+  expect(command.run).toHaveBeenCalledOnce()
+  expect(command.run.mock.calls[0]?.[1]).toContain('--offline')
+})
+
+it.each(['github:acme/plugin', 'https://example.com/plugin.tgz', 'npm:other@1.0.0'])('rejects persisted remote dependency %s before a default intranet install', async (source) => {
+  const { context, dir } = fixture()
+  const manifest = readProfileManifest('dsh', dir)
+  manifest.dependencies = { plugin: source }
+  writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+  await expect(runProfilePnpm({ ...context, distributionMode: 'intranet' }, [], { execution: 'service', outputBytes: 1024 }))
+    .rejects.toThrow(/Intranet/)
+  expect(command.run).not.toHaveBeenCalled()
+})
+
 function result(
   exitCode: number | undefined, output: string, mutate: () => void = () => {},
   details: { code?: string; shortMessage?: string } = {},
@@ -360,6 +420,14 @@ it.each([true, false])('rejects incompatible installed manifests before activati
   // The refused run replaced the installed tree, so the restored lockfile is reinstalled.
   expect(command.run).toHaveBeenLastCalledWith(expect.anything(), ['install', '--frozen-lockfile'], expect.anything())
   expect(outcome.output).toContain('and node_modules')
+})
+
+it.each(['--offline', '--registry=https://npm.corp.example/'])('preserves %s when repairing a rejected package', async (source) => {
+  const { context, pnpm } = fixture()
+  pnpm.mutate = (target) => { installGuarded(target, 'incompatible') }
+  const outcome = await runProfilePnpm(context, ['add', 'https://example.com/plugin.tgz', source], { execution: 'service', outputBytes: 8192 })
+  expect(outcome.exitCode).toBe(1)
+  expect(command.run).toHaveBeenLastCalledWith(expect.anything(), ['install', '--config.lockfile=false', source], expect.anything())
 })
 
 it('repairs a profile that had no lockfile without creating one', async () => {

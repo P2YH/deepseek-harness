@@ -18,6 +18,7 @@ import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import {
   boot,
   readProfilePatches,
+  resolveProfileDistributionMode,
   createRuntimeResolution,
   initProfile,
   installFailLoud,
@@ -292,10 +293,14 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       startedBundles: composed.profile.layers.map(layer => layer.packageName),
       cwd: process.cwd(), home: resolveDshHome(),
       overlays: composed.overlays, telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
+      distributionMode: resolveProfileDistributionMode(options.profile,
+        composed.profile.layers.map(layer => layer.packageName),
+        options.environment.getFrom('DSH_DISTRIBUTION_MODE', ['process'])?.value),
     }
     const ctx = await boot(NAME, rootConfig, readProfilePatches(NAME, profileContext, composed.profile), async (hostCtx) => {
       app.current = hostCtx
       hostCtx.provide('profileContext', profileContext)
+      hostCtx.provide('distributionMode', profileContext.distributionMode ?? 'standard')
       // Before any config-tree entry mounts, so plugins resolve all launch-time
       // environment values from the same immutable launch snapshot.
       hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)

@@ -67,7 +67,7 @@ const GROUPS = [{
 /** Boot the plugin over fake faces + a stateful fake host (current moves on selectModel). */
 async function bench(locale: 'zh' | 'en' = 'zh') {
   const ctx = new Context()
-  let defaultSelection: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+  let defaultSelection: ModelSelection | null = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
   let selected = defaultSelection
   const calls = { models: 0, select: 0 }
   const projections = new Map<SessionId, SnapshotStore<ModelSelectionProjection | undefined>>()
@@ -191,7 +191,7 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
     rejectSelection: () => {
       selectionFailure = new RemoteError('session/writer-held', 'writer held', { sessionId: sid('owned') })
     },
-    setHostCurrent: (selection: ModelSelection) => { defaultSelection = selection },
+    setHostCurrent: (selection: ModelSelection | null) => { defaultSelection = selection },
     setProjected: (id: SessionId, value: ModelSelectionProjection) => { projections.get(id)?.set(value) },
     address: (id: SessionId) => { addressed.add(id) },
     setGroups: (next: typeof GROUPS) => { groups = next },
@@ -204,6 +204,19 @@ async function bench(locale: 'zh' | 'en' = 'zh') {
 const projection = (id: string) => ({ sessionId: sid(id) })
 
 describe('ui-model-selection dual entry', () => {
+  it('loads an empty catalog and null selection without inventing a default model', async () => {
+    const b = await bench()
+    b.setHostCurrent(null)
+    b.setGroups([])
+    b.ctx.emit('connection/reset')
+    b.mint('empty')
+    expect(await b.ctx.modelDirectories.directoryFor(sid('empty')).load()).toMatchObject({
+      current: null, groups: [], routable: false, status: 'ready', error: null,
+    })
+    expect(await b.popup().options(projection('empty'), new AbortController().signal)).toEqual([])
+    await b.ctx.fiber.dispose()
+  })
+
   it('carries writer contention to the model seat and localizes the command failure', async () => {
     const b = await bench()
     b.mint('owned')
@@ -238,8 +251,8 @@ describe('ui-model-selection dual entry', () => {
     expect(options[0]?.active).toBe(true)
     expect(options[1]?.active).toBeUndefined()
     expect(b.popup().searchLabels?.()).toEqual(locale === 'zh'
-      ? { placeholder: '搜索模型…', empty: '没有可用的模型。', noResults: '没有匹配的模型。' }
-      : { placeholder: 'Search models…', empty: 'No models available.', noResults: 'No matching models.' })
+      ? { placeholder: '搜索模型…', empty: '没有可用模型，请在设置 → 模型中添加模型提供方', noResults: '没有匹配的模型。' }
+      : { placeholder: 'Search models…', empty: 'No models available. Add a provider in Settings → Models.', noResults: 'No matching models.' })
   })
 
   it('orders popup provider groups account-first while retaining third-party catalog order', async () => {

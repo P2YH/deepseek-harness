@@ -25,9 +25,11 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-`listModels` 描述目录驱动界面提供的模型。核心解析与流式调用仍可接受未列出的 ID。GUI 的模型选择与提交要求模型出现在目录中；供 GUI 使用的适配器必须实现 `listModels`，公布其可用模型。基类实现返回空列表，因此不向 GUI 提供模型。
+`listModels` 描述目录驱动界面提供的模型。默认情况下，核心解析与流式调用接受未列出的 ID。GUI 的模型选择要求模型出现在目录中；供 GUI 使用的适配器必须实现 `listModels`，公布其可用模型。基类实现返回空列表，因此不向 GUI 提供模型。
 
-任何调用模型提供方的组合——agent loop（智能体循环）、会话标题生成器、压缩（compaction）摘要器——都会通过本服务流式发起请求。与至少一个提供方适配器一起挂载它；服务本身没有任何配置，也不包含提供方协议代码。
+任何调用模型提供方的组合——agent loop（智能体循环）、会话标题生成器、压缩（compaction）摘要器——都会通过本服务流式发起请求。与至少一个提供方适配器一起挂载它；服务不包含提供方协议代码。
+
+`requireAvailableModel` 默认为 `false`。启用后，运行时在适配器准备调用之前、实际分发之前都会要求提供方已注册且精确模型出现在其可用目录中，包括已经准备的调用与后台调用方。不可用的路由以 `MODEL_UNAVAILABLE` 失败；目录查询失败同样阻止调用。该设置不限制读取已保存历史。
 
 ### 何时选择
 
@@ -71,7 +73,7 @@ for await (const chunk of ctx.llm.stream({
 
 ### 失败与恢复
 
-每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。`QUOTA` 表示提供方中立的额度耗尽，`ACCOUNT_QUOTA` 专用于当前产品能够充值的第一方账号余额不足。点名未注册提供方的请求会以 `NO_ADAPTER` 失败，格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。
+每个流都恰好以一个终止 `finish` 分片结束：失败为 `{ kind: 'error', failure }`，取消为 `{ kind: 'aborted', failure }`。失败携带稳定 code，如 `NO_ADAPTER`、`MISSING_CREDENTIAL`、`AUTH`、`RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`；消费方依据 code 路由，绝不解析消息文本。`QUOTA` 表示提供方中立的额度耗尽，`ACCOUNT_QUOTA` 专用于当前产品能够充值的第一方账号余额不足。使用默认配置时，点名未注册提供方的请求会以 `NO_ADAPTER` 失败；格式错误的凭据会以 `INVALID_CREDENTIAL` 失败，而不是表现为不透明的 fetch 错误。本服务从不自行重跑请求：重试是 `dsh-llm-retry` 在 agent 失败步骤扩展点上的职责。
 
 -----
 

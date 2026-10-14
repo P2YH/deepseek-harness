@@ -12,6 +12,24 @@ vi.mock('node:child_process', async (importOriginal) => {
 })
 
 describe('installer preparation preserves application dependencies', () => {
+  it('pins the intranet distribution in Windows metadata without policy or feed configuration', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet',
+      DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: 'unused-invalid-json',
+      DOWNLOAD_TEST_ORIGIN: 'unused-invalid-origin',
+    }, 'win32', 'x64')
+    expect(config.extraMetadata.dshDistributionMode).toBe('intranet')
+    expect(config.extraMetadata.dshMandatoryUpdatePolicy).toBeUndefined()
+    expect(config.publish).toBeNull()
+  })
+
+  it('rejects unsupported macOS intranet packaging before signing', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet' },
+      'darwin', 'arm64')).toThrow('intranet builds require Windows')
+  })
+
   it.each(['win32', 'darwin'] as const)('rejects a missing production policy before signing on %s', async (platform) => {
     const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.installer',

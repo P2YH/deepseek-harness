@@ -23,6 +23,26 @@ async function withDirectory(action: (directory: string) => Promise<void>): Prom
 }
 
 describe('Desktop local packaging configuration', () => {
+  it('takes the packaged distribution mode from its release file, without ambient fallback', async () => {
+    await withDirectory(async (directory) => {
+      await writeFile(join(directory, '.env.windows'), 'DSH_DISTRIBUTION_MODE=intranet\nDSH_DESKTOP_APP_ID=com.example.intranet\n')
+      const parent = { DSH_DISTRIBUTION_MODE: 'standard' }
+      const selected = loadDesktopPackageEnvironment('win32', parent, directory)
+      expect(selected.DSH_DISTRIBUTION_MODE).toBe('intranet')
+      expect(() => { validateDesktopPackageEnvironment(selected, WINDOWS, { unsigned: true }) }).not.toThrow()
+      expect(() => { validateDesktopPackageEnvironment(selected, WINDOWS, { prepareOnly: true }) }).not.toThrow()
+      expect(() => { validateDesktopPackageEnvironment(selected, MACOS, { prepareOnly: true }) }).toThrow('intranet builds require Windows')
+      await writeFile(join(directory, '.env.windows'), '')
+      expect(loadDesktopPackageEnvironment('win32', { DSH_DISTRIBUTION_MODE: 'intranet' }, directory).DSH_DISTRIBUTION_MODE).toBeUndefined()
+      expect(parent.DSH_DISTRIBUTION_MODE).toBe('standard')
+    })
+  })
+
+  it.each(['', 'offline'])('rejects an unsupported packaged distribution mode %j', (mode) => {
+    expect(() => { validateDesktopPackageEnvironment({ ...RELEASE, DSH_DISTRIBUTION_MODE: mode }, WINDOWS, { unsigned: true }) })
+      .toThrow('DSH_DISTRIBUTION_MODE must be standard or intranet')
+  })
+
   it('takes cache concurrency from the Windows file and defaults to four without ambient overrides', async () => {
     await withDirectory(async (directory) => {
       const parent = { DSH_DESKTOP_WINDOWS_SIGNATURE_CACHE_CONCURRENCY: '8' }

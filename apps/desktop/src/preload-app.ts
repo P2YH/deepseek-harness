@@ -10,6 +10,8 @@ import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
 import { createDesktopBrowserBridge } from './preload-browser.ts'
 
+const intranet = process.argv.includes('--dsh-distribution-mode=intranet')
+
 function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
@@ -59,7 +61,7 @@ function createProductApi(): DshDesktopProductApi {
 }
 
 if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
-  contextBridge.exposeInMainWorld('dshOnboarding', {
+  if (!intranet) contextBridge.exposeInMainWorld('dshOnboarding', {
     hasApiKey: () => ipcRenderer.invoke(DESKTOP_IPC.onboardingApiKey) as Promise<boolean>,
     setActive: (active: boolean) => { ipcRenderer.send(DESKTOP_IPC.onboardingActive, active) },
   })
@@ -72,7 +74,7 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
     else body.setAttribute('tabindex', previous)
   })
   syncWindowsAppearance()
-  if (process.platform === 'win32') installMandatoryUpdateOverlay()
+  if (!intranet && process.platform === 'win32') installMandatoryUpdateOverlay()
   contextBridge.exposeInMainWorld('__DSH_DIRECTORY_PICKER__', {
     pick: () => ipcRenderer.invoke(DESKTOP_IPC.directoryPick) as Promise<string | null>,
   })
@@ -86,7 +88,7 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
     ready: () => ipcRenderer.invoke(DESKTOP_IPC.boot) as Promise<unknown>,
     failed: (message: string) => ipcRenderer.invoke(DESKTOP_IPC.bootFailed, message) as Promise<void>,
   })
-  contextBridge.exposeInMainWorld('dshPlatform', {
+  if (!intranet) contextBridge.exposeInMainWorld('dshPlatform', {
     open: (page: 'usage' | 'top-up', bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke(PLATFORM_IPC.open, page, bounds),
     setBounds: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke(PLATFORM_IPC.bounds, bounds),
     close: () => ipcRenderer.invoke(PLATFORM_IPC.close),

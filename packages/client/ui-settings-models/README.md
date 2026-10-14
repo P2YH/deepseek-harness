@@ -27,6 +27,8 @@ Desktop product events use the optional [product analytics service](../product-a
 <a id="use-this-package"></a>
 ## Use this package
 
+In intranet mode, the Models page remains available without the welcome notice or official credential onboarding. It explains that official account and public companion services are disabled while existing settings are retained. The Host publishes the launcher's distribution mode with the onboarding options, and the Client validates both before registering the page.
+
 Saving credentials or a custom provider preserves the selected model. The user can select an available model from the composer.
 
 DeepSeek Account appears first and DeepSeek second in the provider list; third-party providers retain their directory order.

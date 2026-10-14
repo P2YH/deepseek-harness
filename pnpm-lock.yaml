@@ -621,6 +621,9 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../packages/util/home-paths
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../packages/util/launch-environment
       '@deepseek-ai/node-addon-system':
         specifier: workspace:~
         version: link:../../native/system/packages/entry
@@ -717,6 +720,9 @@ importers:
       '@deepseek-ai/dsh-jobs':
         specifier: workspace:*
         version: link:../../packages/jobs/jobs
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../packages/util/launch-environment
       '@deepseek-ai/dsh-schedule':
         specifier: workspace:*
         version: link:../../packages/schedule/schedule
@@ -1286,6 +1292,9 @@ importers:
       '@deepseek-ai/dsh-deque':
         specifier: workspace:*
         version: link:../../util/deque
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../util/launch-environment
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -1692,12 +1701,18 @@ importers:
       '@deepseek-ai/cordis-plugin-timer':
         specifier: workspace:~
         version: link:../../../vendor/timer
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../core/agent-default-model
       '@deepseek-ai/dsh-home-paths':
         specifier: workspace:*
         version: link:../../util/home-paths
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../core/system-prompt
@@ -1848,6 +1863,9 @@ importers:
       '@deepseek-ai/dsh-host-plugin-inventory':
         specifier: workspace:*
         version: link:../../host/plugin-inventory
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../util/launch-environment
       '@deepseek-ai/dsh-package-manifest':
         specifier: workspace:*
         version: link:../../util/package-manifest
@@ -2630,6 +2648,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-llm-pi-ai':
+        specifier: workspace:*
+        version: link:../../llm/llm-pi-ai
       '@deepseek-ai/dsh-message-feedback':
         specifier: workspace:*
         version: link:../../feedback/message-feedback
@@ -4363,6 +4384,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:*
         version: link:../ui-slots
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../util/launch-environment
       '@deepseek-ai/dsh-package-manifest':
         specifier: workspace:*
         version: link:../../util/package-manifest
@@ -4934,6 +4958,9 @@ importers:
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../host/webserver
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../util/launch-environment
       '@deepseek-ai/dsh-remote-mock':
         specifier: workspace:*
         version: link:../../test-support/remote-mock
@@ -6813,6 +6840,9 @@ importers:
       '@deepseek-ai/dsh-config-editor':
         specifier: workspace:*
         version: link:../../boot/config-editor
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:*
+        version: link:../../util/launch-environment
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery

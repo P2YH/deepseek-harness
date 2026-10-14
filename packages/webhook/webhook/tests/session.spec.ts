@@ -11,6 +11,7 @@ import {
 import { createWebhookSession } from '../src/session.ts'
 
 interface HarnessOptions {
+  noDefaultModel?: boolean
   failAt?: 'permission-resolve' | 'preset-resolve' | 'standing' | 'workspace' | 'agent' | 'attach' | 'permission-set' | 'title' | 'followup'
   failDetach?: boolean
   failDispose?: boolean
@@ -89,6 +90,7 @@ function harness(options: HarnessOptions = {}): SessionHarness {
     agentDefaultModel: {
       currentSelection() {
         calls.push('default-model')
+        if (options.noDefaultModel === true) return null
         return { provider: 'default-provider', model: 'default-model', reasoningEffort: 'high' }
       },
     },
@@ -193,6 +195,13 @@ function modelRequestListener(test: SessionHarness): (
 }
 
 describe('webhook Session creation', () => {
+  it('rejects an omitted model without a default before creating a Workspace or Session', async () => {
+    const test = harness({ noDefaultModel: true })
+    await expect(create(test)).rejects.toThrow('Select a default model before starting a webhook task.')
+    expect(test.calls).toEqual(['default-model'])
+    expect(test.messages).toEqual([])
+  })
+
   it('preflights, mounts, attaches, configures, titles, and prompts in order', async () => {
     const test = harness()
     await create(test)

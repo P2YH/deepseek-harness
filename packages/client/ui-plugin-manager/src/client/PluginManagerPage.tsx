@@ -652,6 +652,7 @@ function terminalLabels(t: Translate): TerminalBlockLabels {
 /** The sentence under the field for a spec the check refused. */
 const INPUT_PROBLEM_KEYS = {
   'invalid-spec': 'installProblemInvalid',
+  'intranet-source-required': 'installProblemIntranetSource',
   'already-installed': 'installProblemInstalled',
   'shipped': 'installProblemShipped',
   'not-found': 'installProblemNotFound',
@@ -714,8 +715,8 @@ function registryList(registries: readonly Registry[], t: Translate, resolved: s
 }
 
 /** An option's name with its host in tertiary text, unless the host is the name. */
-function registryOption(registry: Registry, t: Translate, resolved: string | null): ReactNode {
-  const { name, host } = registryText(registry, t, resolved)
+function registryOption(registry: Registry, t: Translate, resolved: string | null, intranet = false): ReactNode {
+  const { name, host } = registryText(registry, t, resolved, intranet)
   return name === host ? name : <>{name}{' '}<span className={css.registryHint}>{host}</span></>
 }
 
@@ -867,7 +868,7 @@ function InstallDialog({
     const empty = install.spec.trim() === ''
     const choice = install.registry
     const resolved = install.registries?.resolved ?? null
-    const chosenTitle = choice.kind === 'custom' ? t('registryCustom') : registryText(choice.registry, t, resolved).name
+    const chosenTitle = choice.kind === 'custom' ? t('registryCustom') : registryText(choice.registry, t, resolved, install.registries?.intranet).name
     const inputProblem = install.inputError
     // A check no registry answered names every registry asked; any other refusal reads by its problem.
     const askedByCheck = inputProblem?.registries ?? []
@@ -885,7 +886,7 @@ function InstallDialog({
         onClose={onClose}
         title={t('installTitle')}
         closeLabel={t('close')}
-        {...install.mirrorRecovery ? {} : { description: t('installDescription') }}
+        {...install.mirrorRecovery ? {} : { description: t(install.registries?.intranet === true ? 'installDescriptionIntranet' : 'installDescription') }}
         className={css.installDialog as string}
         contentClassName={css.installContent as string}
         footer={(
@@ -1018,7 +1019,7 @@ function InstallDialog({
                         if (choice.kind === 'custom') setCustomRegistryDraft(choice.url)
                         onChooseRegistry({ kind: 'offered', registry })
                       }} />
-                      <span className={css.registryTitle}>{registryOption(registry, t, resolved)}</span>
+                      <span className={css.registryTitle}>{registryOption(registry, t, resolved, install.registries?.intranet)}</span>
                     </label>
                   )
                 })}
@@ -1195,7 +1196,7 @@ function InstallDialog({
                     <div key={run.jobId} className={css.run}>
                       {registry === undefined
                         ? null
-                        : <p className={css.attemptBadge}>{t('installAttemptBadge', { index: String(index + 1), registry: registryText(registry, t, resolved).name })}</p>}
+                        : <p className={css.attemptBadge}>{t('installAttemptBadge', { index: String(index + 1), registry: registryText(registry, t, resolved, install.registries?.intranet).name })}</p>}
                       <TerminalBlock
                         command={run.command}
                         output={run.output}

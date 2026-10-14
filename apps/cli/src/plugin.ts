@@ -1,7 +1,8 @@
 /** Profile package management and explicit, exact-version compatibility approvals. */
 import { runPluginCommand, runProfilePnpm, setProfileVersionExemption, type PackageOperationOptions } from '@deepseek-ai/dsh-plugin-manager/operations'
 import { INSTALL_ANCHOR } from './profile-boot.ts'
-import { DEFAULT_PROFILE_BUNDLES, initProfile, PROFILE_TEMPLATES, readProfileCompatibility, resolveProfileDir, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import { DEFAULT_PROFILE_BUNDLES, initProfile, PROFILE_TEMPLATES, readProfileCompatibility, readProfileManifest, resolveProfileDir, resolveProfileDistributionMode, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
+import type { DistributionMode } from '@deepseek-ai/dsh-launch-environment'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
@@ -65,9 +66,12 @@ async function versionCommand(profile: string, args: readonly string[]): Promise
  * @param profile Profile name; Desktop's reserved profile must already be initialized by the application.
  * @param args DSH exemption command or pnpm arguments relative to the invoking directory.
  * @param packageManager Installation-owned executable and environment for pnpm operations.
+ * @param distributionMode Fixed policy supplied by an application-owned CLI carrier.
  * @returns Zero on success; nonzero on invalid approval or package-manager failure.
  */
-export async function runPlugin(profile: string, args: readonly string[], packageManager?: ProfileContext['packageManager']): Promise<number> {
+export async function runPlugin(
+  profile: string, args: readonly string[], packageManager?: ProfileContext['packageManager'], distributionMode?: DistributionMode,
+): Promise<number> {
   if (profile === 'desktop') {
     try { requireDesktopProfile(resolveProfileDir(profile)) } catch (error) {
       process.stderr.write(`dsh: ${String(error)}\n`)
@@ -80,7 +84,10 @@ export async function runPlugin(profile: string, args: readonly string[], packag
   if (existsSync(join(dir, 'package.json'))) {
     for (const warning of readProfileCompatibility(dir).warnings) process.stderr.write(`dsh: warning: ${warning}\n`)
   }
-  const context = { profile, dir, installAnchor: INSTALL_ANCHOR, cwd: process.cwd() }
+  const bundles = existsSync(join(dir, 'package.json'))
+    ? readProfileManifest('dsh', dir).dsh?.profile?.bundles ?? [] : PROFILE_TEMPLATES[profile]?.bundles ?? DEFAULT_PROFILE_BUNDLES
+  const mode = distributionMode ?? resolveProfileDistributionMode(profile, bundles, process.env.DSH_DISTRIBUTION_MODE)
+  const context = { profile, dir, installAnchor: INSTALL_ANCHOR, cwd: process.cwd(), distributionMode: mode }
   const options: PackageOperationOptions = {
     ...packageManager,
     execution: 'cli',
@@ -89,12 +96,19 @@ export async function runPlugin(profile: string, args: readonly string[], packag
     lookupTimeoutMs: 120000,
     onOutput: (text, stream) => { process[stream].write(text) },
   }
-  const result = profile === 'desktop'
-    ? await withFileLock(join(dir, 'package.json'), async () => {
-      requireDesktopProfile(dir)
-      return runProfilePnpm(context, args, options)
-    }, { waitMs: 120000 })
-    : await runPluginCommand(context, args, options)
+  let result
+  try {
+    result = profile === 'desktop'
+      ? await withFileLock(join(dir, 'package.json'), async () => {
+        requireDesktopProfile(dir)
+        return runProfilePnpm(context, args, options)
+      }, { waitMs: 120000 })
+      : await runPluginCommand(context, args, options)
+  } catch (error) {
+    if (mode !== 'intranet') throw error
+    process.stderr.write(`dsh: ${String(error)}\n`)
+    return 1
+  }
   if (result.exitCode === 127) process.stderr.write('dsh: pnpm was not found; install pnpm and make it available on PATH.\n')
   for (const { name, version, runtimeVersion } of result.incompatible ?? []) {
     process.stderr.write(`dsh: to accept the risk, run: dsh plugin --profile ${profile} allow-version ${name}@${version} --dsh-version ${runtimeVersion} --accept-risk\n`)

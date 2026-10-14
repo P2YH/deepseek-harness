@@ -19,7 +19,7 @@ export interface IncompatiblePlugin {
 
 /** Localizable management failure and optional external diagnostic. */
 export interface ManagementError {
-  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'incompatible-version' | 'operation-error'
+  code: ReadOnlyReason | 'unknown-plugin' | 'invalid-spec' | 'intranet-source-required' | 'ambiguous-install' | 'not-bundle' | 'not-removable' | 'stop-profile' | 'bundle-in-use' | 'stale-approval' | 'incompatible-version' | 'operation-error'
   diagnostic?: string
   /** Present with `incompatible-version`: the packages the running DSH version rejects. */
   incompatible?: IncompatiblePlugin[]
@@ -69,11 +69,13 @@ export interface BundleInfo {
   overrides: string[]
 }
 
-/** A registry to install from: an http(s) URL, or null for the one pnpm's own configuration names. */
+/** An http(s) registry URL, or null for pnpm's configuration in standard mode and local offline installation in intranet mode. */
 export type Registry = string | null
 
 /** The registries the manager asks: the configured first one, its fallbacks in order, and what pnpm's own configuration names. */
 export interface PluginRegistries {
+  /** Intranet mode permits only explicit nonpublic registries and local packages; null installs offline. */
+  readonly intranet?: boolean
   readonly registry: Registry
   readonly fallbackRegistries: readonly string[]
   /** The URL pnpm's own configuration names in the profile, read from pnpm; null when it could not be read. */
@@ -160,6 +162,7 @@ export type InstallSpecKind = 'registry' | 'path' | 'git' | 'tarball'
 /** Why a spec was refused before anything installed. */
 export type PluginInspectProblem =
   | 'invalid-spec'
+  | 'intranet-source-required'
   | 'already-installed'
   | 'not-found'
   | 'not-a-package'

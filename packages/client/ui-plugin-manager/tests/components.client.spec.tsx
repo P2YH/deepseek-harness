@@ -76,6 +76,17 @@ const READY: PluginManagerState = {
   highlight: null,
 }
 
+it('shows local offline installation and intranet guidance without public registry choices', () => {
+  renderTab({ install: {
+    ...IDLE_INSTALL, open: true, registryOpen: true,
+    registries: { intranet: true, registry: null, resolved: null, fallbackRegistries: [] },
+  } })
+  expect(screen.getByText(en.installDescriptionIntranet)).toBeTruthy()
+  expect(screen.getByRole('radio', { name: en.registryOffline })).toBeTruthy()
+  expect(screen.queryByText('registry.npmjs.org')).toBeNull()
+  expect(screen.queryByText('registry.npmmirror.com')).toBeNull()
+})
+
 /**
  * Slot entries a test supplies: what each slot cell renders, by `<slot>:<cell>`
  * (a list slot's cell is empty), the view asked for — `detail` for a detail

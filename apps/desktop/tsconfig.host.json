@@ -8,6 +8,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../packages/util/launch-environment" },
     {
       "path": "../../packages/boot/app-boot"
     },

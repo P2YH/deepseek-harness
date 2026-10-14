@@ -11,6 +11,9 @@ import { join, resolve } from 'node:path'
 import {
   loadOptionalPatches,
   loadOverlayPatches,
+  applyDistributionEntries,
+  composeEntries,
+  resolveProfileDistributionMode,
   renderConfigDump,
   type ConfigDumpLayer,
   type Profile,
@@ -70,6 +73,12 @@ export function collectConfigDumpLayers(
       const absolute = resolve(file)
       layers.push({ label: absolute, patches: loadOverlayPatches(NAME, absolute) })
     }
+  }
+  const mode = resolveProfileDistributionMode(loaded.name,
+    loaded.layers.map(layer => layer.packageName), process.env.DSH_DISTRIBUTION_MODE)
+  if (mode === 'intranet') {
+    return [{ label: 'intranet distribution (effective configuration; stored layers preserved)',
+      patches: [{ insert: applyDistributionEntries(composeEntries(layers.map(layer => layer.patches)), mode) }] }]
   }
   return layers
 }

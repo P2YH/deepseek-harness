@@ -741,7 +741,7 @@ describe('Web session model selection', () => {
     expect(admitted).toMatchObject({ ok: true, value: { accepted: true } })
     expect(followup).toHaveBeenCalledOnce()
     const unavailableCatalog = await buildModelCatalog(ctx)
-    expect(unavailableCatalog.routableProviders.includes(currentSelection(ctx, sessionId).provider)).toBe(false)
+    expect(unavailableCatalog.routableProviders).not.toContain(currentSelection(ctx, sessionId)?.provider)
 
     expect(await remote.selectModel(request({
       sessionId, provider: 'deepseek-official', model: 'unlisted-but-served',

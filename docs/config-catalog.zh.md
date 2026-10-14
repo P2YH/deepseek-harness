@@ -41,15 +41,15 @@ export interface AcpConfig {
 ## `@deepseek-ai/dsh-agent-default-model`
 
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/core/agent-default-model/src/index.ts:24`](../packages/core/agent-default-model/src/index.ts)
+- `source`: [`packages/core/agent-default-model/src/index.ts:25`](../packages/core/agent-default-model/src/index.ts)
 
 ```ts config-catalog
 /** Default model selection supplied by plugin configuration. */
 export interface Config {
-  /** Registered provider route. */
-  provider: Volatile<string>
-  /** Provider-owned model id. */
-  model: Volatile<string>
+  /** Registered provider route; omit together with model for no default. */
+  provider: Volatile<string | undefined>
+  /** Provider-owned model id; omit together with provider for no default. */
+  model: Volatile<string | undefined>
   /** Adapter-owned reasoning effort; omission follows the provider default. */
   reasoningEffort: Volatile<string | undefined>
 }
@@ -224,7 +224,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-session-controller`
 
 - `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
-- `source`: [`packages/api/session-controller/src/index.ts:79`](../packages/api/session-controller/src/index.ts)
+- `source`: [`packages/api/session-controller/src/index.ts:80`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
 /** Session Controller deployment policy. */
@@ -536,7 +536,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-client-ui-plugin-manager`
 
-- `source`: [`packages/client/ui-plugin-manager/src/index.ts:15`](../packages/client/ui-plugin-manager/src/index.ts)
+- `source`: [`packages/client/ui-plugin-manager/src/index.ts:16`](../packages/client/ui-plugin-manager/src/index.ts)
 
 ```ts config-catalog
 /** Registry-probe deadline and process-local cache policy. */
@@ -1564,6 +1564,22 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-jobs-local -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm -->
+<a id="deepseek-aidsh-llm"></a>
+
+## `@deepseek-ai/dsh-llm`
+
+- `source`: [`packages/llm/llm/src/index.ts:340`](../packages/llm/llm/src/index.ts)
+
+```ts config-catalog
+/** Deployment policy applied before any adapter prepares or dispatches a request. */
+export interface Config {
+  /** Require the current provider catalog to advertise every requested model. */
+  requireAvailableModel?: boolean
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-llm -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-llm-deepseek-account -->
 <a id="deepseek-aidsh-llm-deepseek-account"></a>
 
@@ -2250,7 +2266,7 @@ export interface PlanModeConfig {
 ## `@deepseek-ai/dsh-plugin-manager`
 
 - `inject`: `loader` · `profileContext`
-- `source`: [`packages/boot/plugin-manager/src/index.ts:40`](../packages/boot/plugin-manager/src/index.ts)
+- `source`: [`packages/boot/plugin-manager/src/index.ts:42`](../packages/boot/plugin-manager/src/index.ts)
 
 ```ts config-catalog
 /** The pnpm executable, registries, and limits for diagnostics, lookups and connection checks. */
@@ -4406,7 +4422,6 @@ export interface Config {
 | `@deepseek-ai/dsh-host-directory-picker-auto` | `webServer` · `loader` | [`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts) |
 | `@deepseek-ai/dsh-host-directory-picker-native` | — | [`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts) |
 | `@deepseek-ai/dsh-host-plugin-inventory` | `loader` | [`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts) |
-| `@deepseek-ai/dsh-llm` | — | [`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts) |
 | `@deepseek-ai/dsh-lsp` | — | [`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts) |
 | `@deepseek-ai/dsh-mcp-resources` | `tools` | [`packages/mcp/mcp-resources/src/index.ts`](../packages/mcp/mcp-resources/src/index.ts) |
 | `@deepseek-ai/dsh-otel` | — | [`packages/telemetry/otel/src/index.ts`](../packages/telemetry/otel/src/index.ts) |

@@ -18,6 +18,7 @@
  */
 
 import { readdir } from 'node:fs/promises'
+import { resolveDesktopDistributionMode } from './desktop-distribution-mode.mjs'
 import { parse } from 'semver'
 import { desktopBuildVersionPrefix, validateDesktopBuildVersion } from './desktop-build-version.mjs'
 import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
@@ -87,6 +88,7 @@ async function localVersions(artifactsRoot: string): Promise<string[]> {
  * @returns Versions parsed from object names, or undefined when the bucket cannot be listed completely in time.
  */
 async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Promise<string[] | undefined> {
+  if (resolveDesktopDistributionMode(options.environment) === 'intranet') return undefined
   const platform = options.target === 'win-x64' ? 'win32' as const : 'darwin' as const
   const arch = options.target === 'mac-arm64' ? 'arm64' : 'x64'
   // An unconfigured destination has nothing to be unique against; an invalid one must not be mistaken for it.

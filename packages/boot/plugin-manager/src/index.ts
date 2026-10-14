@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { Context } from '@deepseek-ai/cordis'
+import { distributionModeOf } from '@deepseek-ai/dsh-launch-environment'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import z from '@deepseek-ai/schemastery'
@@ -22,7 +23,8 @@ import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
 import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
 import { InvalidInstallSpecError, parseInstallSpec, type ParsedInstallSpec } from './install-spec.ts'
-import { attributeFailure, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
+import { attributeFailure, isPublicRegistry, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
+import { intranetRegistry } from './intranet.ts'
 import { writePluginEnabled } from './patch.ts'
 import { incompatiblePlugin, ManagementFailure } from './failure.ts'
 import { approveBuilds, readPendingBuilds } from './build-approval.ts'
@@ -319,10 +321,18 @@ export class PluginManager extends TypertRemoteService {
   }
 
   /** Read the registries this manager asks: the configured first one, its fallbacks in order, and what pnpm's own configuration names.
-   * @returns The registries in pnpm's comparison form; null is the one pnpm's own configuration names, `resolved` as pnpm reads it now.
+   * @returns The registries in pnpm's comparison form. In standard mode, null names pnpm's own registry, read as `resolved`.
+   * In intranet mode, only an explicit nonpublic registry is returned; null permits local offline installation and no fallback is offered.
    */
   @Remote
   async registries(): Promise<PluginRegistries> {
+    if (distributionModeOf(this.ctx) === 'intranet') {
+      const registry = this.configuredRegistries.registry
+      return {
+        intranet: true, registry: registry !== null && !isPublicRegistry(registry) ? registry : null,
+        fallbackRegistries: [], resolved: null,
+      }
+    }
     return {
       ...this.configuredRegistries, fallbackRegistries: [...this.configuredRegistries.fallbackRegistries],
       resolved: await readProfileRegistry(this.profile.dir, {
@@ -352,7 +362,15 @@ export class PluginManager extends TypertRemoteService {
     const known = new Set([
       ...manifest.dsh?.profile?.bundles ?? [], ...Object.keys(manifest.dependencies ?? {}), ...Object.keys(installation.dependencies ?? {}),
     ])
-    const plan = registryPlan(options?.registry, await this.registries())
+    let plan: Registry[]
+    try {
+      plan = await this.installRegistries(parsed, options?.registry)
+    } catch (error) {
+      if (error instanceof ManagementFailure && error.code === 'intranet-source-required') {
+        return refused('intranet-source-required', 'Use a local package or configure an intranet registry')
+      }
+      throw error
+    }
     const registry = plan[0] as Registry
     switch (parsed.kind) {
       case 'git': return { status: 'accepted', kind: 'git', bundle: null, registry, host: parsed.host }
@@ -470,6 +488,14 @@ export class PluginManager extends TypertRemoteService {
     const result = this.change(async (result) => {
       if (spec.trim() === '' || spec.startsWith('-')) throw new ManagementFailure('invalid-spec')
       if (stopped()) throw new InstallCancelledError()
+      let parsed: ParsedInstallSpec
+      try {
+        parsed = distributionModeOf(this.ctx) === 'intranet' ? parseInstallSpec(spec) : parsedForRegistry(spec)
+      } catch (error) {
+        if (error instanceof InvalidInstallSpecError) throw new ManagementFailure('invalid-spec')
+        throw error
+      }
+      const plan = await this.installRegistries(parsed, options?.registry)
       if (options?.approvedBuilds !== undefined) {
         await approveBuilds(this.profile.dir, options.approvedBuilds)
         result.approvedBuilds = options.approvedBuilds
@@ -495,7 +521,6 @@ export class PluginManager extends TypertRemoteService {
           throw new Error(connectionFailure.output)
         }
         // The last run is the result's; the registries asked stay listed whatever the outcome.
-        const plan = registryPlan(options?.registry, await this.registries())
         let run: PackageResult | undefined
         for (const [index, registry] of plan.entries()) {
           if (index > 0) await this.restoreFiles(files)
@@ -503,7 +528,8 @@ export class PluginManager extends TypertRemoteService {
           if (stopped()) throw new InstallCancelledError()
           result.registries.push(registry)
           announce('installing', { registry, index: index + 1, total: plan.length })
-          run = await this.runPnpm(['add', spec, ...registryArguments(registry)], control.abort.signal, requestId)
+          const source = distributionModeOf(this.ctx) === 'intranet' && registry === null ? ['--offline'] : registryArguments(registry)
+          run = await this.runPnpm(['add', spec, ...source], control.abort.signal, requestId)
           result.packageResult = run
           if (stopped()) throw new InstallCancelledError()
           // A compatibility refusal is the package's own answer, so no other registry is asked.
@@ -564,6 +590,11 @@ export class PluginManager extends TypertRemoteService {
     }, { stage: 'install', target: spec, enabled: options?.enabled !== false }, 'install')
     control.result = result
     return result.finally(() => { if (requestId !== undefined) this.installs.delete(requestId) })
+  }
+
+  private async installRegistries(spec: ParsedInstallSpec, requested: Registry | undefined): Promise<Registry[]> {
+    const configured = await this.registries()
+    return configured.intranet === true ? [intranetRegistry(spec, requested, configured.registry)] : registryPlan(requested, configured)
   }
 
   /** Recover the result of an active installation without cancelling it.
@@ -665,7 +696,7 @@ export class PluginManager extends TypertRemoteService {
     const argv = ['pnpm', ...args]
     const cwd = this.profile.dir
     const identity = requestId === undefined ? {} : { requestId }
-    const task = runProfilePnpm({ ...this.profile, profile: this.profile.name }, args, {
+    const task = runProfilePnpm({ ...this.profile, profile: this.profile.name, distributionMode: distributionModeOf(this.ctx) }, args, {
       execution: 'service', ...this.profile.packageManager ?? { command: this.pnpmCommand },
       signal: signal === undefined ? this.abort.signal : AbortSignal.any([this.abort.signal, signal]),
       outputBytes: this.outputBytes, activateNewBundles: false, idleTimeoutMs: this.idleTimeoutMs,
