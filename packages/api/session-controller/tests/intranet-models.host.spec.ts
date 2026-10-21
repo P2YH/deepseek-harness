@@ -36,6 +36,7 @@ async function fixture() {
     await rm(cwd, { recursive: true, force: true })
   })
   ctx.provide('distributionMode', 'intranet')
+  ctx.provide('workspaceRegistry', { archivedSessionIds: [] } as never)
   await mountAgentLoopTestDependencies(ctx)
   await mountAgentLoopTestHarness(ctx)
   const adapter = new IntranetAdapter()
@@ -127,12 +128,28 @@ it('rejects account model initialization before inspecting provider configuratio
   expect(save).not.toHaveBeenCalled()
 })
 
+it('creates a new Session when the named Session has already started a turn', async () => {
+  const { ctx, cwd, remote, adapter } = await fixture()
+  const created = await remote.create({ cwd })
+  if (!created.ok) throw created.error
+  const session = ctx.sessions.get(created.value.sessionId)
+  if (session === undefined) throw new Error('session was not created')
+  session.append('turn/start', { turn: 1 })
+  const original = [...session.snapshotEvents()]
+  const next = await remote.create({ sessionId: session.id, cwd })
+  if (!next.ok) throw next.error
+  expect(next.value.sessionId).not.toBe(session.id)
+  expect(session.snapshotEvents()).toEqual(original)
+  expect(adapter.calls).toEqual([])
+})
+
 it('reuses a persisted blank Session without a default and still rejects its first prompt', async () => {
   const { ctx, cwd, remote, adapter } = await fixture()
   const events: SessionEvent[] = [{ type: 'session/end-seed', seq: SessionSeq(0), time: 1, data: {} }]
   const original = structuredClone(events)
   const { id, opens } = storeHistory(ctx, cwd, events)
-  expect(await remote.create({ sessionId: id, cwd })).toMatchObject({ ok: true, value: { sessionId: id } })
+  const result = await remote.create({ sessionId: id, cwd })
+  expect(result).toMatchObject({ ok: true, value: { sessionId: id } })
   expect(opens).toContain('write')
   expect(ctx.agents.get(id)).toBeDefined()
   expect(await remote.prompt({ sessionId: id, requestId: 'reused-blank' as SessionRequestId,
@@ -142,14 +159,12 @@ it('reuses a persisted blank Session without a default and still rejects its fir
   expect(adapter.calls).toEqual([])
 })
 
-it.each(['next-turn', 'next-step', 'turn'] as const)('requires a model before adopting cold %s work', async (kind) => {
+it.each(['next-turn', 'next-step'] as const)('requires a model before adopting cold %s work', async (kind) => {
   const { ctx, cwd, remote, adapter } = await fixture()
-  const events: SessionEvent[] = kind === 'turn'
-    ? [{ type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } }]
-    : [{ type: 'agent/inbox/spliced', seq: SessionSeq(0), time: 1,
-      data: { target: kind, start: 0, inserted: [createUserMessage({
-        content: [{ type: 'text', text: 'Pending work' }], source: { kind: 'user' },
-      })] } }]
+  const events: SessionEvent[] = [{ type: 'agent/inbox/spliced', seq: SessionSeq(0), time: 1,
+    data: { target: kind, start: 0, inserted: [createUserMessage({
+      content: [{ type: 'text', text: 'Pending work' }], source: { kind: 'user' },
+    })] } }]
   const original = structuredClone(events)
   const { id, opens } = storeHistory(ctx, cwd, events)
   expect(await remote.create({ sessionId: id, cwd }))
