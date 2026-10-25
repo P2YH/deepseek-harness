@@ -43,6 +43,18 @@ afterEach(() => {
 })
 
 describe('desktop external plugin profile', () => {
+  it('provisions deployment model keys before starting a fresh or existing profile', async () => {
+    const { root, manager } = setup()
+    const seed = join(root, 'keys.json')
+    writeFileSync(seed, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'test-hezhi' } }))
+    const deployment = new DesktopProjectManager(manager.paths, { ...manager.runtime, intranetModelCredentials: seed })
+    await deployment.applyRelease()
+    const dotenv = join(manager.paths.home, '.env')
+    expect(readFileSync(dotenv, 'utf8')).toContain('DIZHI_API_KEY=test-dizhi')
+    writeFileSync(dotenv, 'DIZHI_API_KEY=target-key\n')
+    await deployment.applyRelease()
+    expect(readFileSync(dotenv, 'utf8')).toBe('DIZHI_API_KEY=target-key\nHEZHI_API_KEY=test-hezhi\n')
+  })
   it('preserves installed packages, profile state, and the lockfile when preparing a launch', async () => {
     const { manager } = setup()
     await manager.applyRelease()

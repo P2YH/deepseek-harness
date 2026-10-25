@@ -13,13 +13,15 @@ import { validateMacOSSignatureCacheDirectory } from './macos-signature-cache-di
 import { resolveMacOSPackageSettings } from './macos-package-settings.mjs'
 import { resolveWindowsSignatureCacheDirectory } from './windows-signature-cache-directory.mjs'
 import { resolveWindowsPackageSettings } from './windows-package-settings.mjs'
+import { resolveIntranetModelKeysFile } from './intranet-model-keys.mjs'
+import { resolveBundledPluginsDirectory } from './bundled-plugins.mjs'
 
 const APP_ROOT = fileURLToPath(new URL('..', import.meta.url))
-const SHARED_SETTING = /^(?:DSH_DISTRIBUTION_MODE|DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|NPM_REGISTRY|MANDATORY_UPDATE_(?:CONFIG|(?:TEST|PROD)_ORIGIN))|DOWNLOAD_TEST_RELEASE_ID|DOWNLOAD_(?:TEST|PROD)_(?:ORIGIN|COS_BUCKET|COS_SECRET_ID|COS_SECRET_KEY))$/u
+const SHARED_SETTING = /^(?:DSH_DISTRIBUTION_MODE|DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|NPM_REGISTRY|BUNDLED_PLUGINS_DIR|INTRANET_MODEL_KEYS_FILE|MANDATORY_UPDATE_(?:CONFIG|(?:TEST|PROD)_ORIGIN))|DOWNLOAD_TEST_RELEASE_ID|DOWNLOAD_(?:TEST|PROD)_(?:ORIGIN|COS_BUCKET|COS_SECRET_ID|COS_SECRET_KEY))$/u
 const WINDOWS_SETTING = /^DSH_DESKTOP_WINDOWS_(?:CER_FILE|SIGNTOOL|KEY_CONTAINER|TOKEN_PIN|SIGNATURE_CACHE_DIR|SIGNATURE_CACHE_CONCURRENCY)$/u
 const MACOS_SETTING = /^(?:DSH_DISTRIBUTION_MODE|DSH_DESKTOP_MACOS_(?:SIGNING_IDENTITY|TEAM_ID|SIGNATURE_CACHE_DIR|PACK_CONCURRENCY|DOWNLOAD_PROXY|NOTARIZATION_PROXY)|APPLE_(?:API_KEY|API_KEY_ID|API_ISSUER|ID|APP_SPECIFIC_PASSWORD|TEAM_ID|KEYCHAIN|KEYCHAIN_PROFILE)|CSC_(?:LINK|KEY_PASSWORD))$/u
-const AMBIENT_RELEASE_SETTING = /^(?:DSH_DISTRIBUTION_MODE|DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|MANDATORY_UPDATE_.*|WINDOWS_.*|MACOS_.*)|APPLE_.*|(?:WIN_)?CSC_.*|DOWNLOAD_(?:TEST|PROD)_.*)$/iu
-const FILE_SETTINGS = ['DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGNTOOL', 'APPLE_API_KEY', 'APPLE_KEYCHAIN', 'CSC_LINK']
+const AMBIENT_RELEASE_SETTING = /^(?:DSH_DISTRIBUTION_MODE|DSH_DESKTOP_(?:APP_ID|AUTO_UPDATE_ENV|BUNDLED_PLUGINS_DIR|INTRANET_MODEL_KEYS_FILE|MANDATORY_UPDATE_.*|WINDOWS_.*|MACOS_.*)|APPLE_.*|(?:WIN_)?CSC_.*|DOWNLOAD_(?:TEST|PROD)_.*)$/iu
+const FILE_SETTINGS = ['DSH_DESKTOP_BUNDLED_PLUGINS_DIR', 'DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE', 'DSH_DESKTOP_WINDOWS_CER_FILE', 'DSH_DESKTOP_WINDOWS_SIGNTOOL', 'APPLE_API_KEY', 'APPLE_KEYCHAIN', 'CSC_LINK']
 
 /**
  * Select local macOS test defaults without reading dotenv files or inheriting release settings.
@@ -138,6 +140,8 @@ export function validateDesktopPackageEnvironment(environment, target, options =
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
   const intranet = resolveDesktopDistributionMode(environment) === 'intranet'
+  resolveIntranetModelKeysFile(environment)
+  resolveBundledPluginsDirectory(environment)
   if (intranet && target.platform !== 'win32') throw new Error('desktop package: intranet builds require Windows')
   if (!intranet && (target.platform !== 'darwin' || !options.unsigned)) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)

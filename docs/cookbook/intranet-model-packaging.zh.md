@@ -40,7 +40,17 @@
 
 当前源码组合默认核智。如需新安装默认地质科技，将 bundle patch 中 `agent-default-model` 的内网分支改为 `dizhi` 和 `gen-studio-Qwen3.6-27B-ygNP`，保留标准模式分支，并更新对应测试。已有 Profile 保存的选择仍优先。
 
-本地安装器 `0.2.0-rc.2.20261008.1` 早于这两种 provider 的接入，需按下文配置 Profile 或重新构建。不要将 API Key、开发机凭据文件或整个开发机 Harness home 打入安装器。
+本地安装器 `0.2.0-rc.2.20261008.1` 早于这两种 provider 的接入，需按下文配置 Profile 或重新构建。常规构建不包含密钥。经授权的内网部署可按下文仅预置两个模型的密钥；不要将开发机凭据文件或整个 Harness home 打入安装器。
+
+### 可选的部署密钥
+
+如需经授权的内网安装器免填写密钥，在 `apps/desktop/.env.windows` 中设置 `DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE`，指向源码目录以外的私有 JSON 文件。相对路径以 `apps/desktop` 为基准。标准模式拒绝此设置，启动环境中的同名变量不会启用它。输入仅允许以下结构，将示例值替换为部署所用的真实 Bearer 密钥：
+
+```json
+{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key"}}
+```
+
+安装器包含可提取的凭据，应在其授权范围内分发。内网桌面启动 Host 前，将缺失或为空的密钥补入 `$DSH_HOME/.env`。已有非空 home 值保持不变；Profile 的 dotenv 值、通过模型设置保存到 `.credentials.yaml` 的密钥以及继承的进程凭据优先。这也可修复已有安装，无需替换其 Profile、插件、项目或会话。未启用此选项的安装器仍需在目标机配置密钥。
 
 <a id="installation-and-upgrades"></a>
 
@@ -54,7 +64,7 @@
 4. 启动桌面版，进入“设置 → 模型”，分别编辑 provider，通过官方凭据服务保存 API Key。密钥保存在 Harness home 的 `.credentials.yaml`，与 provider 配置分开存储。
 5. 重启桌面版，在新建会话中检查模型。已有会话保留显式选择；需要时在该会话的模型选择器中切换。
 
-覆盖安装不会重新应用 Profile seed。覆盖了适配器完整配置的 Profile 需要显式合并两条 route。启用评审插件不自动写入模型配置或凭据。新目标机器必须单独配置密钥。
+覆盖安装不会重新应用 Profile seed。覆盖了适配器完整配置的 Profile 需要显式合并两条 route。启用评审插件不自动写入模型配置或凭据。除非安装器按上文携带经授权的部署密钥，新目标机器必须单独配置密钥。
 
 将下面不含密钥的示例合并到目标 Profile：
 

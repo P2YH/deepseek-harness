@@ -883,6 +883,13 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('selectSessionModel') selectSessionModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>
 
 /**
+ * Persist the output budget used by subsequent requests, including resumed Sessions.
+ * @param request - Session identity and positive budget, or null to restore the preset default.
+ * @returns the persisted execution settings after their durable flush.
+ */
+@Remote('configureExecution') async configureExecution(request: SessionConfigureExecutionRequest): Promise<SessionExecutionConfig>
+
+/**
  * Select the first available account model after login when no provider API key is configured.
  * Intranet mode rejects this account-only operation before reading provider credentials.
  * @returns after saving the first available model or retaining the existing default.

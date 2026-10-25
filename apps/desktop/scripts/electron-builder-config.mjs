@@ -1,5 +1,7 @@
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
 import { resolveDesktopDistributionMode } from './desktop-distribution-mode.mjs'
+import { resolveIntranetModelKeysFile } from './intranet-model-keys.mjs'
+import { resolveBundledPluginsDirectory } from './bundled-plugins.mjs'
 import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -54,6 +56,8 @@ export function createElectronBuilderConfig(
   const appId = resolveDesktopAppId(env)
   const distributionMode = resolveDesktopDistributionMode(env)
   const intranet = distributionMode === 'intranet'
+  const intranetKeysFile = resolveIntranetModelKeysFile(env)
+  const bundledPlugins = resolveBundledPluginsDirectory(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   if (intranet && resolvedPlatform !== 'win32') throw new Error('desktop package: intranet builds require Windows')
@@ -115,6 +119,8 @@ export function createElectronBuilderConfig(
       dshDistributionMode: distributionMode,
       dshDesktopUpdateChannel: update?.channel ?? 'nightly',
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
+      ...(intranetKeysFile === undefined ? {} : { dshIntranetModelCredentials: true }),
+      ...(bundledPlugins === undefined ? {} : { dshBundledPlugins: true }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
@@ -157,6 +163,8 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
+      ...(intranetKeysFile === undefined ? [] : [{ from: intranetKeysFile, to: 'intranet-model-credentials.json' }]),
+      ...(bundledPlugins === undefined ? [] : [{ from: bundledPlugins, to: 'bundled-plugins' }]),
       { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
       ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
@@ -200,6 +208,17 @@ export function createElectronBuilderConfig(
     afterPack: async context => {
       const { verifyDesktopRuntime } = await import('../lib/types/runtime-tree.js')
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
+      if (bundledPlugins !== undefined) {
+        const { verifyBundledPlugins } = await import('../lib/types/bundled-plugins.js')
+        verifyBundledPlugins(join(resourcesDir, 'bundled-plugins'))
+      }
+      if (intranetKeysFile !== undefined) {
+        const packagedKeys = join(resourcesDir, 'intranet-model-credentials.json')
+        resolveIntranetModelKeysFile({ ...env, DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE: packagedKeys })
+        if (!(await readFile(packagedKeys)).equals(await readFile(intranetKeysFile))) {
+          throw new Error('desktop package: intranet deployment credentials do not match the selected file')
+        }
+      }
       if (resolvedPlatform === 'darwin' && update !== undefined) {
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)

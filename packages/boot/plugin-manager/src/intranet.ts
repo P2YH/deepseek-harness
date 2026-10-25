@@ -7,7 +7,8 @@ import { parseInstallSpec } from './install-spec.ts'
 import { resolve } from 'node:path'
 
 const INSTALL_COMMANDS = new Set(['add', 'install', 'i'])
-const MUTATING_COMMANDS = new Set([...INSTALL_COMMANDS, 'remove', 'rm', 'uninstall'])
+const REMOVE_COMMANDS = new Set(['remove', 'rm', 'uninstall'])
+const MUTATING_COMMANDS = new Set([...INSTALL_COMMANDS, ...REMOVE_COMMANDS])
 const READ_COMMANDS = new Set(['list', 'ls'])
 const OPTIONS = new Set(['--offline', '--ignore-scripts', '--frozen-lockfile', '--lockfile-only', '--prod', '--dev',
   '--save-dev', '--save-prod', '--save-exact', '--no-optional', '-D', '-P', '-E', '--json', '--parseable', '--long'])
@@ -34,11 +35,14 @@ export function intranetPnpmArguments(input: readonly string[], cwd: string): st
   let registry: Registry = null
   const iterator = args.values()
   for (const argument of iterator) {
-    if (argument === '--registry' || argument.startsWith('--registry=')) {
-      const url = argument === '--registry' ? iterator.next().value : argument.slice('--registry='.length)
+    if (argument === '--registry' || argument.startsWith('--registry=')
+      || (REMOVE_COMMANDS.has(command) && argument.startsWith('--config.registry='))) {
+      const url = argument === '--registry' ? iterator.next().value : argument.slice(argument.indexOf('=') + 1)
       if (url === undefined || registry !== null) throw new Error('Intranet plugin management requires one explicit registry URL')
       registry = normalizeRegistry(url)
       if (isPublicRegistry(registry)) throw new Error('Intranet plugin management refuses public npm sources; use an intranet registry or local package')
+    } else if (REMOVE_COMMANDS.has(command) && argument === '--config.offline=true') {
+      flags.push('--offline')
     } else if (argument.startsWith('-')) {
       if (!OPTIONS.has(argument) && !/^--depth=\d+$/.test(argument)) {
         throw new Error(`Intranet plugin management does not support pnpm option ${argument}`)
@@ -60,7 +64,10 @@ export function intranetPnpmArguments(input: readonly string[], cwd: string): st
     }
   }
   if (MUTATING_COMMANDS.has(command) && registry === null && !flags.includes('--offline')) flags.push('--offline')
-  return [command, ...specs, ...flags, ...registry === null ? [] : [`--registry=${registry}`]]
+  // pnpm remove accepts these settings only through generic configuration flags.
+  const removal = REMOVE_COMMANDS.has(command)
+  return [command, ...specs, ...flags.map(flag => removal && flag === '--offline' ? '--config.offline=true' : flag),
+    ...registry === null ? [] : [`${removal ? '--config.registry' : '--registry'}=${registry}`]]
 }
 
 /** Refuse remote specs in an existing manifest before a default installation.

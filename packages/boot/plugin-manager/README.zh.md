@@ -30,7 +30,7 @@ kind: "package-reference"
 
 内网模式下，检查与安装仅接受本地目录、本地压缩包，或显式配置的非公网 `registry` 中的包名。公网 npm 源、Git 地址和远程压缩包会在修改包文件之前被拒绝。内网源失败后不会重试公网备用源。未配置安装源时，本地包使用 pnpm 离线模式安装，其依赖必须已有缓存。
 
-共享执行层将启动器的内网模式应用于 CLI 和服务操作。它允许 `add`、`install`/`i`、`remove`/`rm`/`uninstall` 和 `list`/`ls`；拒绝 `exec`、`dlx` 等不支持的命令、未知选项和远程来源别名。本地与默认安装使用离线模式，除非显式指定内网 `--registry`。默认安装也会拒绝已记录在 profile manifest 中的远程来源。标准模式保留 pnpm 参数原样转发。
+共享执行层将启动器的内网模式应用于 CLI 和服务操作。它允许 `add`、`install`/`i`、`remove`/`rm`/`uninstall` 和 `list`/`ls`；拒绝 `exec`、`dlx` 等不支持的命令、未知选项和远程来源别名。本地修改使用离线模式，除非显式指定内网 `--registry`；卸载操作通过 pnpm 通用配置参数传递离线及安装源设置。默认安装也会拒绝已记录在 profile manifest 中的远程来源。标准模式保留 pnpm 参数原样转发。
 
 基于 base 的 profile 提供管理服务。在 Web 中，侧边栏的**插件**页（[ui-plugin-manager](../../client/ui-plugin-manager/README.zh.md)）管理 profile 的组合包及其能唯一定位的行；设置页的插件列表保持只读。Agent 预设条目保持只读。`plugin_manager` 工具提供相同操作，在 Creator 模式中启用。其他预设仍默认禁用。每个工具操作都要求 `danger-full-access` 或本次调用的批准。在较低沙箱模式下，`ask` 会请求审批；`never`、拒绝、取消或审批渠道不可用时均不执行。批准不改变会话的权限模式。profile 变更跨会话持久化，已安装的 Host 代码在宿主进程内运行，不受工作区沙箱限制。依赖构建脚本仍需单独批准。
 

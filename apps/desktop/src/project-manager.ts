@@ -21,6 +21,8 @@ import {
 } from './core-package-set.ts'
 import type { DesktopPaths } from './paths.ts'
 import type { DesktopRelease } from './release.ts'
+import { seedIntranetModelCredentials } from './intranet-model-credentials.ts'
+import { seedBundledPlugins } from './bundled-plugins.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import {
   initProfile, PROFILE_TEMPLATES, removeLinkProjections, sanitizeProfile, type ProfileTemplate,
@@ -65,7 +67,7 @@ export class DesktopProjectManager {
    */
   constructor(
     readonly paths: DesktopPaths,
-    readonly runtime: { readonly dsh: string },
+    readonly runtime: { readonly dsh: string; readonly intranetModelCredentials?: string; readonly bundledPlugins?: string },
   ) {}
 
   /**
@@ -81,12 +83,16 @@ export class DesktopProjectManager {
    * Load application metadata and prepare the external plugin profile without installing packages.
    */
   async applyRelease(): Promise<void> {
-    await this.withLock(() => {
+    await this.withLock(async () => {
       // Validation only: an unreadable or mismatched runtime descriptor stops preparation before the Host starts.
       readDesktopRuntime(this.runtime.dsh)
       migrateProfileSettings(this.paths.profile)
       createPluginProfile(this.paths.profile)
       removeLinkProjections(this.paths.profile)
+      if (this.runtime.bundledPlugins !== undefined) seedBundledPlugins(this.paths.profile, this.runtime.bundledPlugins)
+      if (this.runtime.intranetModelCredentials !== undefined) {
+        await seedIntranetModelCredentials(this.paths.home, this.runtime.intranetModelCredentials)
+      }
     })
   }
 

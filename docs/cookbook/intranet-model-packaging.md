@@ -40,7 +40,17 @@ Follow the [Desktop packaging procedure](../../apps/desktop/README.md#release-ve
 
 The source composition currently defaults to Hezhi. To make new installations default to Dizhi, update the intranet branches of `agent-default-model` in the bundle patch to `dizhi` and `gen-studio-Qwen3.6-27B-ygNP`, retain the standard-mode branches, and update the owning tests. An existing Profile's saved selection still takes precedence.
 
-The local installer `0.2.0-rc.2.20261008.1` predates these provider additions; configure its Profile as below or rebuild it. Do not include API keys, a developer credentials file, or an entire developer Harness home in the installer.
+The local installer `0.2.0-rc.2.20261008.1` predates these provider additions; configure its Profile as below or rebuild it. Normal builds carry no keys. A private intranet deployment may explicitly provision just the two model keys as described below; never copy a developer credentials file or an entire Harness home into an installer.
+
+### Optional deployment keys
+
+For an authorized internal installer that must work without entering keys, set `DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE` in `apps/desktop/.env.windows` to a private JSON file outside the source tree. Relative paths resolve against `apps/desktop`. Standard-mode builds reject this setting; ambient environment values cannot enable it. The input must contain only this structure, with the deployment's real Bearer keys in place of the example values:
+
+```json
+{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key"}}
+```
+
+The installer contains these extractable credentials and must be distributed within their authorized scope. On startup, the packaged intranet Desktop fills absent or empty entries in `$DSH_HOME/.env` before starting the Host. Existing nonempty home values remain unchanged; Profile dotenv values, keys saved through Models in `.credentials.yaml` and inherited process credentials take precedence. This also repairs an existing installation without replacing its Profile, plugins, projects or sessions. Installers without this opt-in still require target-machine keys.
 
 <a id="installation-and-upgrades"></a>
 
@@ -54,7 +64,7 @@ The target needs a compatible Desktop runtime and network access to the selected
 4. Start Desktop, open Settings → Models, edit each provider, and save its API key through the official credentials service. Keys are stored in the Harness home's `.credentials.yaml`, separately from provider configuration.
 5. Restart Desktop and check the model in a new conversation. Existing conversations retain their explicit selection; change it in that conversation's model selector when needed.
 
-An overwrite installation does not reapply Profile seed. A Profile overriding the adapter's full configuration must merge these routes explicitly. Enabling the review plugin does not populate model configuration or credentials. New target machines must configure their own keys.
+An overwrite installation does not reapply Profile seed. A Profile overriding the adapter's full configuration must merge these routes explicitly. Enabling the review plugin does not populate model configuration or credentials. New target machines must configure their own keys unless the authorized installer carries deployment keys as above.
 
 Merge this key-free example into the target Profile:
 

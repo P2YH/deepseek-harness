@@ -153,6 +153,7 @@ export class SessionCommandController {
   /**
    * Validate and install one Session-local model selection; save the default in the background.
    * @param request - Session identity and requested model selection.
+   * @param persistDefault - Whether to persist this selection as the global default.
    * @returns the normalized selection installed for the Session, without waiting for default persistence.
    */
   async selectModel(request: SessionSelectModelRequest, persistDefault = true): Promise<SessionSelectModelValue> {

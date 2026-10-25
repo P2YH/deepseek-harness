@@ -2107,6 +2107,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the validated selection installed for subsequent Session requests.',
       },
       {
+        signature: '@Remote(\'configureExecution\') async configureExecution(request: SessionConfigureExecutionRequest): Promise<SessionExecutionConfig>',
+        description: 'Persist the output budget used by subsequent requests, including resumed Sessions.',
+        parameters: [{ name: 'request', description: 'Session identity and positive budget, or null to restore the preset default.' }],
+        returns: 'the persisted execution settings after their durable flush.',
+      },
+      {
         signature: '@Remote async initializeDefaultModel(): Promise<void>',
         description: 'Select the first available account model after login when no provider API key is configured. Intranet mode rejects this account-only operation before reading provider credentials.',
         parameters: [],
@@ -7074,6 +7080,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCancelValue {\n    readonly accepted: true;\n}',
   },
   {
+    name: 'SessionConfigureExecutionRequest',
+    declaration: 'export interface SessionConfigureExecutionRequest extends SessionExecutionConfig {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'SessionControlBaseline',
     declaration: 'export interface SessionControlBaseline {\n    readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>;\n}',
   },
@@ -7164,6 +7174,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionEventWindow',
     declaration: 'export interface SessionEventWindow {\n    session: SessionHeader;\n    inheritedEventCount: SessionLogOffset;\n    target: SessionEvent;\n    events: SessionEvent[];\n    startSeq: SessionSeq;\n    endSeq: SessionSeq;\n}',
+  },
+  {
+    name: 'SessionExecutionConfig',
+    declaration: 'export interface SessionExecutionConfig {\n    readonly maxTokens: number | null;\n}',
   },
   {
     name: 'SessionFeedbackRecordRequest',

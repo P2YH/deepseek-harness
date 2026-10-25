@@ -94,6 +94,8 @@ it.each([
   ['add', 'github:acme/plugin'], ['add', 'plugin@https://example.com/plugin.tgz', '--registry=https://npm.corp.example/'],
   ['add', 'plugin', '--registry=https://registry.npmjs.org/'], ['add', 'plugin'],
   ['install', '--config.registry=https://registry.npmjs.org/'], ['install', '--offline=false'],
+  ['remove', 'plugin', '--config.registry=https://registry.npmjs.org/'],
+  ['remove', 'plugin', '--config.offline=false'],
 ])('refuses intranet pnpm arguments %j before spawning or changing a profile', async (...args) => {
   const { context, dir } = fixture()
   const before = readFileSync(join(dir, 'package.json'), 'utf8')
@@ -112,12 +114,32 @@ it('rejects an unsupported intranet command before initializing a missing profil
   expect(command.run).not.toHaveBeenCalled()
 })
 
-it.each([[], ['install'], ['remove', 'plugin'], ['add', './local-plugin']])('runs intranet local or default operation %j offline', async (...args) => {
+it.each([[], ['install'], ['add', './local-plugin']])('runs intranet local or default operation %j offline', async (...args) => {
   const { context } = fixture()
   expect(await runProfilePnpm({ ...context, distributionMode: 'intranet' }, args, { execution: 'service', outputBytes: 1024 }))
     .toMatchObject({ exitCode: 0 })
   expect(command.run).toHaveBeenCalledOnce()
   expect(command.run.mock.calls[0]?.[1]).toContain('--offline')
+})
+
+it.each(['remove', 'rm', 'uninstall'])('runs intranet %s with pnpm-supported offline settings through the CLI path', async (removal) => {
+  const { context } = fixture()
+  expect(await runPluginCommand({ ...context, distributionMode: 'intranet' }, [removal, 'plugin', '--offline'], {
+    execution: 'service', outputBytes: 1024,
+  })).toMatchObject({ exitCode: 0 })
+  expect(command.run).toHaveBeenCalledOnce()
+  expect(command.run.mock.calls[0]?.[1]).toContain('--config.offline=true')
+  expect(command.run.mock.calls[0]?.[1]).not.toContain('--offline')
+})
+
+it.each(['--registry', '--config.registry'])('removes an intranet plugin with validated %s configuration', async (flag) => {
+  const { context } = fixture()
+  await runPluginCommand({ ...context, distributionMode: 'intranet' }, ['remove', 'plugin', `${flag}=https://npm.corp.example/`], {
+    execution: 'service', outputBytes: 1024,
+  })
+  expect(command.run).toHaveBeenCalledOnce()
+  expect(command.run.mock.calls[0]?.[1]).toContain('--config.registry=https://npm.corp.example/')
+  expect(command.run.mock.calls[0]?.[1]).not.toContain('--registry=https://npm.corp.example/')
 })
 
 it.each(['https://npm.corp.example/', 'http://npm.internal/'])('uses the explicit intranet registry %s for lookup and install', async (registry) => {

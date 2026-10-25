@@ -34,6 +34,8 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
+    /** Persisted output budget for subsequent requests in this ordinary Session. */
+    'session/execution-config': SessionExecutionConfig
     /**
      * Complete validated model selection requested for subsequent prompt
      * assembly. Log-only: it never enters derived model history.
@@ -303,6 +305,17 @@ export interface SessionCreateValue {
   readonly sessionId: SessionId
   /** Preset the Session runs, when the deployment composes a preset roster. */
   readonly agentPreset?: string
+}
+
+/** Session-local execution settings, restored before the next model request. */
+export interface SessionExecutionConfig {
+  /** Positive maximum output tokens per model request; null restores the preset default. */
+  readonly maxTokens: number | null
+}
+
+/** Configure subsequent requests without changing deployment defaults. */
+export interface SessionConfigureExecutionRequest extends SessionExecutionConfig {
+  readonly sessionId: SessionId
 }
 
 /** Session model-selection request. */

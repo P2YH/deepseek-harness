@@ -517,7 +517,8 @@ export async function runProfilePnpm(
         const hadLockfile = savedFiles.some(file => file.path.endsWith('pnpm-lock.yaml') && file.text !== undefined)
         // Recovery must retain the source restriction of the rejected operation.
         const repair = ['install', hadLockfile ? '--frozen-lockfile' : '--config.lockfile=false',
-          ...args.filter(argument => argument === '--offline' || argument.startsWith('--registry='))]
+          ...args.filter(argument => argument === '--offline' || argument === '--config.offline=true'
+            || argument.startsWith('--registry=') || argument.startsWith('--config.registry='))]
         const repairing = execa(options.command ?? 'pnpm', [...options.args ?? [], ...repair], {
           cwd: dir, env: environment, extendEnv: false, reject: false, stdin: 'ignore',
           ...options.idleTimeoutMs === undefined ? {} : { timeout: options.idleTimeoutMs },

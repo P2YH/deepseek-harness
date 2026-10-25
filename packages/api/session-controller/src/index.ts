@@ -73,6 +73,7 @@ export type * from './types.ts'
 export { ApiSessionNotFound } from './agent.ts'
 export { SessionFileReferences } from './file-references.ts'
 export { SessionSkillCatalog } from './skill-catalog.ts'
+import type { SessionConfigureExecutionRequest, SessionExecutionConfig } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -326,6 +327,26 @@ export class SessionController extends TypertRemoteService {
   @Remote('selectSessionModel')
   selectSessionModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue> {
     return this.commands.selectModel(request, false)
+  }
+
+  /**
+   * Persist the output budget used by subsequent requests, including resumed Sessions.
+   * @param request - Session identity and positive budget, or null to restore the preset default.
+   * @returns the persisted execution settings after their durable flush.
+   */
+  @Remote('configureExecution')
+  async configureExecution(request: SessionConfigureExecutionRequest): Promise<SessionExecutionConfig> {
+    if (request.maxTokens !== null && (!Number.isSafeInteger(request.maxTokens) || request.maxTokens <= 0)) {
+      throw new RemoteError('gateway/bad-request', 'maxTokens must be a positive integer or null', {})
+    }
+    const found = await this.resolveAgent(request.sessionId)
+    if ('error' in found) throw found.error
+    if (found.agent.status === 'running') throw new RemoteError('session/agent-busy', 'Configure execution before submitting work', { reason: 'agent running' })
+    this.agents.installExecutionBudget(found.agent)
+    const config = { maxTokens: request.maxTokens }
+    found.agent.session.append('session/execution-config', config)
+    await this.ctx.sessions.flush(found.agent.session)
+    return config
   }
 
   /**

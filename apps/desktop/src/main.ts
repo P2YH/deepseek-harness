@@ -337,7 +337,13 @@ async function main(): Promise<void> {
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
   const activeProject = paths.profile
-  const manager = new DesktopProjectManager(paths, resources)
+  const manager = new DesktopProjectManager(paths, {
+    ...resources,
+    ...(intranet && !development && 'dshBundledPlugins' in manifest && manifest.dshBundledPlugins === true
+      ? { bundledPlugins: join(process.resourcesPath, 'bundled-plugins') } : {}),
+    ...(intranet && !development && 'dshIntranetModelCredentials' in manifest && manifest.dshIntranetModelCredentials === true
+      ? { intranetModelCredentials: join(process.resourcesPath, 'intranet-model-credentials.json') } : {}),
+  })
   // Dock and Finder launches inherit only launchd's environment; every Host shares one login-shell read.
   const loginShellRead = new AbortController()
   // The probe runs in its own process group, which outlives Desktop unless the read is aborted.

@@ -12054,6 +12054,83 @@
       }
     },
     {
+      "key": "event:session/execution-config",
+      "kind": "event",
+      "event": "session/execution-config",
+      "surface": false,
+      "digest": "8bc00333d964d795efa25e867cf3efba9bcd8d88e3ae784e4c015d1c515e1961",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 5,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 4,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 6,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "maxTokens",
+                "type": 2,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "union",
+            "types": [
+              3,
+              4
+            ]
+          },
+          {
+            "kind": "primitive",
+            "type": "null"
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "literal",
+            "value": "session/execution-config"
+          }
+        ]
+      }
+    },
+    {
       "key": "event:session/title",
       "kind": "event",
       "event": "session/title",
@@ -23574,7 +23651,7 @@
         "packages/workflow/workflow/src/types.ts#WorkflowRunId"
       ],
       "sources": [
-        "packages/api/session-controller/src/types.ts:410",
+        "packages/api/session-controller/src/types.ts:423",
         "packages/attachment/attachment/src/brand.ts:6",
         "packages/compaction/compaction/src/brand.ts:4",
         "packages/core/session/src/types.ts:21",
@@ -24096,7 +24173,7 @@
       "digest": "6dacb1584f2bfbe209dc6b6f578d51da6d55595f64d0e63c727c98f359278def",
       "names": [],
       "sources": [
-        "packages/api/session-controller/src/types.ts:419"
+        "packages/api/session-controller/src/types.ts:432"
       ]
     },
     {
@@ -24541,6 +24618,11 @@
       ]
     },
     {
+      "digest": "8bc00333d964d795efa25e867cf3efba9bcd8d88e3ae784e4c015d1c515e1961",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "8c1c4f72755a78ea163523a46565316e36e9b644382eb48e6635c71a6f412dd2",
       "names": [],
       "sources": []
@@ -24797,6 +24879,11 @@
       "sources": [
         "packages/experimental/webhook/src/types.ts:74"
       ]
+    },
+    {
+      "digest": "9f20c3849d9697f6201cb1b9228ad003aa7c7260120ef216d620c7292b7ade78",
+      "names": [],
+      "sources": []
     },
     {
       "digest": "9f65c43e340bba31cdc0fc37bd93ccb68d5e9b36f47a68c207e95a8e68620a5d",
@@ -25916,7 +26003,7 @@
         "packages/api/session-controller/src/types.ts#ModelSelection"
       ],
       "sources": [
-        "packages/api/session-controller/src/types.ts:101"
+        "packages/api/session-controller/src/types.ts:103"
       ]
     },
     {
@@ -26104,6 +26191,15 @@
       "digest": "fab35c4520883c0d69e42d079c9f543fc5ac7a2d15b537b5572fcd99059c7018",
       "names": [],
       "sources": []
+    },
+    {
+      "digest": "fb25065276de10d5fde3f69d817d869a59e65595b647cbebd2fb9612bdc0a690",
+      "names": [
+        "packages/api/session-controller/src/types.ts#SessionExecutionConfig"
+      ],
+      "sources": [
+        "packages/api/session-controller/src/types.ts:311"
+      ]
     },
     {
       "digest": "fb5e0517050d2c6d40e5b8145db1f7c5ca7044d5d50fada6ff80e0b22c6ca973",

@@ -36,7 +36,9 @@ Windows 打包从 `.env.windows` 读取 `DSH_DISTRIBUTION_MODE=standard|intranet
 
 Windows 内网包不嵌入更新源或强制更新策略，不要求更新服务配置，也不生成上传完成记录。自动构建编号仅读取本地产物。签名要求仍由所选的签名或未签名打包命令决定。macOS 内网打包会被拒绝。此模式不提供网络隔离，也不能使已配置的模型服务离线可用。
 
-地质科技和核智的内网端点、凭据配置、默认选择及覆盖升级，见[内网模型打包与配置](../../docs/cookbook/intranet-model-packaging.zh.md)。
+地质科技和核智的内网端点、可选的免填写部署密钥、默认选择及覆盖升级，见[内网模型打包与配置](../../docs/cookbook/intranet-model-packaging.zh.md)。
+
+Windows 内网包可在 `.env.windows` 中配置 `DSH_DESKTOP_BUNDLED_PLUGINS_DIR`，内置办公平台及架构评审。使用两个包含完整依赖的离线归档执行 `node scripts/prepare-bundled-plugins.mjs <新目录> <office.tgz> <review.tgz>`，生成资源目录；清单对两个发行插件设置 `updateExisting: true`。启动 Host 前，Desktop 核对归档及解压文件的记录哈希，安装缺失插件，并在所选归档或模块投影不同时替换已有发行插件，包括开发版本号相同的情况。更新保留启停选择，将被替换模块和 Profile 元数据备份到 `profiles/desktop/.desktop-plugin-backups`；提交失败时恢复原模块投影和元数据。此前已移除的插件保持移除。清单省略 `updateExisting` 时保留已有插件版本。安装过程不修改模型选择、其他插件、工作区、会话或业务文件。是否安装由包内 manifest 决定，运行时环境变量不能开启此行为。
 
 桌面埋点遵循[产品采集策略](../../packages/client/product-analytics/README.zh.md)及其动态应用配置，不包含 Web 使用情况。安装更新会等待该操作的本地埋点接收请求结束，再锁定 API 准入并停止 Host。接收请求的时限为一秒，失败不会阻止安装，也不等待收集端完成发送。
 

@@ -17,6 +17,8 @@ export interface DesktopElectronBuilderConfig {
   readonly extraMetadata: {
     readonly dshDesktopAppId: string
     readonly dshDistributionMode: DistributionMode
+    readonly dshBundledPlugins?: true
+    readonly dshIntranetModelCredentials?: true
     readonly dshMandatoryUpdatePolicy?: unknown
   }
   readonly asarUnpack: readonly string[]
