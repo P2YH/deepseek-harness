@@ -30,7 +30,7 @@ Use the Base URL below, without appending `/chat/completions` in configuration. 
 | Thinking parameter | Not configured | `chat_template_kwargs.enable_thinking` |
 | Declared input | Text | Text and images; vision is not live-verified |
 
-Both routes use `openai-completions` and Bearer authentication. Context/output budgets of 32768/8192 tokens are provisional deployment settings, not verified service limits.
+Both routes use `openai-completions` and Bearer authentication. Dizhi omits capacity overrides and inherits the official adapter defaults, currently 262144/32768 context/output tokens; the SDK may reduce the output allowance to fit the remaining context. Hezhi retains provisional deployment settings of 32768/8192 tokens. Neither these defaults nor the provisional settings establish server limits.
 
 <a id="packaging"></a>
 
@@ -66,6 +66,8 @@ The target needs a compatible Desktop runtime and network access to the selected
 
 An overwrite installation does not reapply Profile seed. A Profile overriding the adapter's full configuration must merge these routes explicitly. Enabling the review plugin does not populate model configuration or credentials. New target machines must configure their own keys unless the authorized installer carries deployment keys as above.
 
+To inherit the official adapter defaults for Dizhi, remove the old provisional `contextWindow: 32768` and `maxTokens: 8192` fields from that model in any Profile override. Do not change the adapter constants or its remaining-context calculation. Logged adapter defaults are resolved again on the next request; explicit Agent and Session output settings remain authoritative.
+
 Merge this key-free example into the target Profile:
 
 ```yaml
@@ -87,8 +89,6 @@ Merge this key-free example into the target Profile:
         models:
           - id: gen-studio-Qwen3.6-27B-ygNP
             name: 地质科技 Qwen3.6-27B
-            contextWindow: 32768
-            maxTokens: 8192
             input: [text]
       hezhi:
         displayName: 核智

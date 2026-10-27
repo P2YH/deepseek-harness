@@ -1,8 +1,13 @@
 /** Provision release-selected offline plugins without resolving packages on the network. */
 import { createHash, randomUUID } from 'node:crypto'
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import * as nodeFs from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readProfileManifest } from '@deepseek-ai/dsh-app-boot'
+
+// Provision physical archives as bytes; Electron's node:fs treats .asar paths as virtual directories.
+const { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync }
+  = Object.hasOwn(process.versions, 'electron') ? createRequire(import.meta.url)('original-fs') as typeof nodeFs : nodeFs
 
 interface BundledPlugin {
   readonly name: string
@@ -10,6 +15,7 @@ interface BundledPlugin {
   readonly sha256: string
   readonly updateExisting?: boolean
   readonly files: readonly { readonly path: string; readonly sha256: string }[]
+  readonly electronFiles?: readonly { readonly path: string; readonly sha256: string }[]
 }
 
 interface PluginUpdate {
@@ -37,7 +43,7 @@ export function readBundledPlugins(directory: string): readonly BundledPlugin[] 
   const names = new Set<string>()
   return value.plugins.map((entry: unknown) => {
     if (typeof entry !== 'object' || entry === null || !('name' in entry) || typeof entry.name !== 'string'
-      || !/^dsh-plugin-[a-z0-9-]+$/u.test(entry.name) || names.has(entry.name)
+      || !(entry.name === 'dsh-pet' || /^dsh-plugin-[a-z0-9-]+$/u.test(entry.name)) || names.has(entry.name)
       || !('version' in entry) || typeof entry.version !== 'string'
       || !('sha256' in entry) || typeof entry.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(entry.sha256)
       || 'updateExisting' in entry && typeof entry.updateExisting !== 'boolean'
@@ -45,15 +51,24 @@ export function readBundledPlugins(directory: string): readonly BundledPlugin[] 
       throw new Error('desktop bundled plugins: invalid plugin record')
     }
     names.add(entry.name)
-    const files = entry.files.map((file: unknown) => {
-      if (typeof file !== 'object' || file === null || !('path' in file) || typeof file.path !== 'string'
-        || file.path.includes('\\') || file.path.includes(':') || file.path.split('/').some(part => !part || part === '.' || part === '..')
-        || !('sha256' in file) || typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(file.sha256)) {
-        throw new Error('desktop bundled plugins: invalid file record')
-      }
-      return { path: file.path, sha256: file.sha256 }
-    })
+    const readFiles = (records: unknown) => {
+      if (!Array.isArray(records) || !records.length) throw new Error('desktop bundled plugins: invalid file inventory')
+      return records.map((file: unknown) => {
+        if (typeof file !== 'object' || file === null || !('path' in file) || typeof file.path !== 'string'
+          || file.path.includes('\\') || file.path.includes(':') || file.path.split('/').some(part => !part || part === '.' || part === '..')
+          || !('sha256' in file) || typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(file.sha256)) {
+          throw new Error('desktop bundled plugins: invalid file record')
+        }
+        return { path: file.path, sha256: file.sha256 }
+      })
+    }
+    const files = readFiles(entry.files)
+    const electronFiles = 'electronFiles' in entry ? readFiles(entry.electronFiles) : undefined
+    if (entry.name === 'dsh-pet' ? !electronFiles?.some(file => file.path === 'electron.exe') : electronFiles !== undefined) {
+      throw new Error('desktop bundled plugins: invalid pet Electron inventory')
+    }
     return { name: entry.name, version: entry.version, sha256: entry.sha256, files,
+      ...electronFiles === undefined ? {} : { electronFiles },
       ...'updateExisting' in entry ? { updateExisting: entry.updateExisting as boolean } : {} }
   })
 }
@@ -76,12 +91,40 @@ function verifyPlugin(source: string, plugin: BundledPlugin): void {
   if (published.name !== plugin.name || published.version !== plugin.version) throw new Error('desktop bundled plugins: package identity mismatch')
 }
 
+function verifyElectron(directory: string, files: NonNullable<BundledPlugin['electronFiles']>): void {
+  for (const file of files) {
+    if (createHash('sha256').update(readFileSync(join(directory, ...file.path.split('/')))).digest('hex') !== file.sha256) {
+      throw new Error(`desktop bundled plugins: Electron file mismatch for ${file.path}`)
+    }
+  }
+}
+
+function seedPetElectron(home: string, directory: string, plugin: BundledPlugin): void {
+  if (plugin.electronFiles === undefined || existsSync(join(home, 'electron/electron.exe'))) return
+  const destination = join(home, 'electron')
+  if (pathExists(destination)) throw new Error('desktop bundled plugins: existing pet Electron runtime is incomplete')
+  const source = join(directory, plugin.name, 'electron')
+  verifyElectron(source, plugin.electronFiles)
+  mkdirSync(home, { recursive: true })
+  const temporary = `${destination}.${randomUUID()}.tmp`
+  try {
+    cpSync(source, temporary, { recursive: true })
+    verifyElectron(temporary, plugin.electronFiles)
+    renameSync(temporary, destination)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
+}
+
 /**
- * Verify both archive and extracted resources after installer assembly.
+ * Verify archives, extracted plugins and the optional pet runtime after installer assembly.
  * @param directory - Physical resources copied by Electron Builder.
  */
 export function verifyBundledPlugins(directory: string): void {
-  for (const plugin of readBundledPlugins(directory)) verifyPlugin(join(directory, plugin.name), plugin)
+  for (const plugin of readBundledPlugins(directory)) {
+    verifyPlugin(join(directory, plugin.name), plugin)
+    verifyElectron(join(directory, plugin.name, 'electron'), plugin.electronFiles ?? [])
+  }
 }
 
 function pathExists(path: string): boolean {
@@ -95,8 +138,9 @@ function pathExists(path: string): boolean {
  * Without updateExisting, existing dependencies remain unchanged. Failed commits restore prior projections and metadata.
  * @param profile - Initialized external Desktop profile.
  * @param directory - Physical packaged trees and their self-contained npm archives.
+ * @param home - Harness home containing the pet's shared Electron runtime.
  */
-export function seedBundledPlugins(profile: string, directory: string): void {
+export function seedBundledPlugins(profile: string, directory: string, home: string): void {
   const plugins = readBundledPlugins(directory)
   const manifestPath = join(profile, 'package.json')
   const manifest = readProfileManifest('dsh', profile)
@@ -126,16 +170,20 @@ export function seedBundledPlugins(profile: string, directory: string): void {
       throw new Error(`desktop bundled plugins: undeclared package already exists: ${plugin.name}`)
     }
     verifyPlugin(join(directory, plugin.name), plugin)
+    verifyElectron(join(directory, plugin.name, 'electron'), plugin.electronFiles ?? [])
     plans.push({ plugin, owned, destination, existing, projected, next: `${destination}.${randomUUID()}.tmp`, installed: false })
     dependencies[plugin.name] = selected
     if (!existing && !bundles.includes(plugin.name)) bundles.push(plugin.name)
   }
+  const pet = plugins.find(plugin => plugin.name === 'dsh-pet')
+  if (pet !== undefined && Object.hasOwn(dependencies, pet.name)) seedPetElectron(home, directory, pet)
   // All release resources are verified before changing any installed module.
   for (const plan of plans) {
     if (!existsSync(plan.owned)) {
       mkdirSync(join(profile, '.desktop-bundles'), { recursive: true })
       const stage = `${plan.owned}.${randomUUID()}.tmp`
-      cpSync(join(directory, plan.plugin.name), stage, { recursive: true })
+      const source = join(directory, plan.plugin.name)
+      cpSync(source, stage, { recursive: true, filter: path => path !== join(source, 'electron') })
       verifyPlugin(stage, plan.plugin)
       renameSync(stage, plan.owned)
     } else verifyPlugin(plan.owned, plan.plugin)

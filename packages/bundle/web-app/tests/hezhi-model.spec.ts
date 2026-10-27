@@ -34,6 +34,8 @@ async function composition(mode: 'standard' | 'intranet'): Promise<Context> {
 }
 
 it('offers the Hezhi default only in intranet mode and keeps it editable', async () => {
+  vi.stubEnv('HEZHI_API_KEY','local-test-only')
+  vi.stubEnv('DIZHI_API_KEY','local-test-only')
   const standard = await composition('standard')
   expect(standard.llm.listProviders()).toEqual([])
   expect(standard.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-official', model: 'deepseek-flash' })
@@ -97,4 +99,53 @@ it('sends the Dizhi model and max_tokens to the prefixed Chat Completions endpoi
   expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
   expect(server.paths).toEqual(['/openai/v1/chat/completions'])
   expect(server.headers[0]?.authorization).toBe('Bearer local-test-only')
+})
+
+it('uses official adapter defaults for Dizhi without a deployment output cap', async () => {
+  vi.stubEnv('DIZHI_API_KEY', 'local-test-only')
+  const server = await mockServer([{ events: textEvents }])
+  const ctx = await composition('intranet')
+  const entry = ctx.loader.resolve('llm-pi-ai')
+  const raw = interpolate(entry.ctx, entry.options.config) as PiAi.Options
+  await entry.update({ config: { providers: { ...raw.providers,
+    dizhi: { ...raw.providers?.dizhi, baseURL: server.url + '/openai/v1' },
+  } } })
+  await ctx.loader.await()
+  const result = await assemble(ctx, { provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP',
+    messages: [createUserMessage({ content: [{ type: 'text', text: 'ping' }], source: { kind: 'user' } })] })
+  expect(result.finish).toEqual({ kind: 'stop' })
+  expect(server.requests[0]).toMatchObject({ max_tokens: 32768 })
+  const info = await ctx.llm.resolveModelInfo('dizhi', 'gen-studio-Qwen3.6-27B-ygNP')
+  expect(info.context?.contextWindow).toBe(262144)
+  expect(info.defaultMaxTokens).toBeUndefined()
+})
+
+it('retains a truncated Dizhi answer when continuing under official defaults', async () => {
+  vi.stubEnv('DIZHI_API_KEY', 'local-test-only')
+  const server = await mockServer([
+    { events: [
+      JSON.stringify({ choices: [{ delta: { role: 'assistant', reasoning_content: 'checking', content: 'partial answer' }, index: 0, finish_reason: null }] }),
+      JSON.stringify({ choices: [{ delta: {}, index: 0, finish_reason: 'length' }], usage: { prompt_tokens: 26882, completion_tokens: 266 } }),
+      '[DONE]',
+    ] },
+    { events: textEvents },
+  ])
+  const ctx = await composition('intranet')
+  const entry = ctx.loader.resolve('llm-pi-ai')
+  const raw = interpolate(entry.ctx, entry.options.config) as PiAi.Options
+  await entry.update({ config: { providers: { ...raw.providers,
+    dizhi: { ...raw.providers?.dizhi, baseURL: server.url + '/openai/v1' },
+  } } })
+  await ctx.loader.await()
+  const prompt = createUserMessage({ content: [{ type: 'text', text: 'Complete the report.' }], source: { kind: 'user' } })
+  const first = await assemble(ctx, { provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP', messages: [prompt] })
+  expect(first.finish).toEqual({ kind: 'max-tokens' })
+  const next = await assemble(ctx, { provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP',
+    messages: [prompt, first.message, createUserMessage({ content: [{ type: 'text', text: '继续' }], source: { kind: 'user' } })] })
+  expect(next.finish).toEqual({ kind: 'stop' })
+  expect(server.requests[1]).toMatchObject({ max_tokens: 32768, messages: [
+    { role: 'user', content: 'Complete the report.' },
+    { role: 'assistant', content: 'partial answer' },
+    { role: 'user', content: '继续' },
+  ] })
 })

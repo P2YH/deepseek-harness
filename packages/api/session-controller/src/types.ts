@@ -307,15 +307,10 @@ export interface SessionCreateValue {
   readonly agentPreset?: string
 }
 
-/** Session-local execution settings, restored before the next model request. */
+/** Historical execution settings retained for reading existing Session logs; never applied. */
 export interface SessionExecutionConfig {
   /** Positive maximum output tokens per model request; null restores the preset default. */
   readonly maxTokens: number | null
-}
-
-/** Configure subsequent requests without changing deployment defaults. */
-export interface SessionConfigureExecutionRequest extends SessionExecutionConfig {
-  readonly sessionId: SessionId
 }
 
 /** Session model-selection request. */

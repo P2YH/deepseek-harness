@@ -170,6 +170,8 @@ On macOS the custom menu retains Electron's standard Window menu and application
 
 ### Runtime and plugin activation
 
+Offline plugin provisioning uses Electron's `original-fs` to verify and copy physical plugin resources, including the pet runtime's `.asar` files. Application archive access remains enabled; provisioning never changes `process.noAsar`.
+
 The signed `resources/app.asar/dsh/desktop-runtime.json` binds the shell version, Electron's Node version, platform, architecture, shared package versions, and final file inventory. Startup reads the metadata and checks shared package records. Release schema, shell version, target compatibility, and file integrity are verified during packaging. Reintroducing startup release comparisons requires a concrete installation failure that packaging validation and actual Host diagnostics cannot adequately explain. Core packages are never copied into profile storage or installed by pnpm at first launch.
 
 1. The main window loads the shared Web loading page offscreen from packaged static assets before profile preparation or backend startup. Shared profile initialization creates missing manifest, empty user patch, and pnpm workspace files without overwriting existing files.

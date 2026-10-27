@@ -12,7 +12,7 @@ import {
 } from '../scripts/desktop-bundle-imports.mjs'
 
 const MAIN: BundleImportPolicy = {
-  packages: new Set(['electron', 'electron-updater', '@deepseek-ai/dsh-api-gateway']),
+  packages: new Set(['electron', 'original-fs', 'electron-updater', '@deepseek-ai/dsh-api-gateway']),
   nodeBuiltins: true,
 }
 const PRELOAD: BundleImportPolicy = { packages: new Set(['electron', 'events', 'timers', 'url']), nodeBuiltins: false }
@@ -38,6 +38,7 @@ describe('desktop bundle imports', () => {
       'node:fs/promises',
       'crypto',
       'electron',
+      'original-fs',
       'electron-updater/out/electronHttpExecutor.js',
       '@deepseek-ai/dsh-api-gateway/stream-protocol',
     ], MAIN)).toEqual([])

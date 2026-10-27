@@ -89,7 +89,7 @@ export class DesktopProjectManager {
       migrateProfileSettings(this.paths.profile)
       createPluginProfile(this.paths.profile)
       removeLinkProjections(this.paths.profile)
-      if (this.runtime.bundledPlugins !== undefined) seedBundledPlugins(this.paths.profile, this.runtime.bundledPlugins)
+      if (this.runtime.bundledPlugins !== undefined) seedBundledPlugins(this.paths.profile, this.runtime.bundledPlugins, this.paths.home)
       if (this.runtime.intranetModelCredentials !== undefined) {
         await seedIntranetModelCredentials(this.paths.home, this.runtime.intranetModelCredentials)
       }

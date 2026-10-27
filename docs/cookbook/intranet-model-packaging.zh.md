@@ -30,7 +30,7 @@
 | 思考参数 | 未配置 | `chat_template_kwargs.enable_thinking` |
 | 输入声明 | 文本 | 文本、图片；视觉能力未实测 |
 
-两条 route 均使用 `openai-completions` 和 Bearer 认证。上下文/输出预算 32768/8192 token 是临时部署配置，不是已验证的服务端限制。
+两条 route 均使用 `openai-completions` 和 Bearer 认证。地质不覆盖容量，继承官方适配器默认值，目前为 262144/32768 上下文/输出 token；SDK 可根据剩余上下文缩减输出额度。核智保留 32768/8192 token 的临时部署配置。这些默认值和临时配置均不代表已验证的服务端限制。
 
 <a id="packaging"></a>
 
@@ -66,6 +66,8 @@
 
 覆盖安装不会重新应用 Profile seed。覆盖了适配器完整配置的 Profile 需要显式合并两条 route。启用评审插件不自动写入模型配置或凭据。除非安装器按上文携带经授权的部署密钥，新目标机器必须单独配置密钥。
 
+要让地质继承官方适配器默认值，需从 Profile 覆盖配置中的该模型删除原有临时 `contextWindow: 32768` 与 `maxTokens: 8192` 字段。不修改适配器常量或剩余上下文计算。日志中标记为适配器默认值的字段会在下次请求重新解析；显式 Agent 与 Session 输出设置仍优先。
+
 将下面不含密钥的示例合并到目标 Profile：
 
 ```yaml
@@ -87,8 +89,6 @@
         models:
           - id: gen-studio-Qwen3.6-27B-ygNP
             name: 地质科技 Qwen3.6-27B
-            contextWindow: 32768
-            maxTokens: 8192
             input: [text]
       hezhi:
         displayName: 核智

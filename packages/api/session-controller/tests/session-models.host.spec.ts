@@ -930,40 +930,27 @@ it.each([new Error('catalog disconnected'), 'catalog disconnected'])('reports ca
 })
 
 
-describe('ordinary Session execution budget', () => {
-  it('applies the durable budget to every request and restores preset defaults when cleared', async () => {
-    const { ctx, agent, sessionId } = await harness()
+describe('historical Session execution budgets', () => {
+  it('keeps historical events readable without overriding native request settings', async () => {
+    const { ctx, agent } = await harness()
     onTestFinished(() => ctx.fiber.dispose())
-    Object.defineProperty(agent, 'status', { value: 'idle', configurable: true })
     const controller = createSessionTestController(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
-    // Existing resident agents must receive budgets without controller-owned composition.
-    const signal = new AbortController().signal
+    expect('configureExecution' in controller).toBe(false)
     const seed: LlmCallConfig = { provider: 'deepseek-official', model: 'deepseek-chat', maxTokens: 300 }
-    const assemble = () => agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 0, signal }, () => Promise.resolve(seed))
-    await expect(controller.configureExecution({ sessionId, maxTokens: 8192 })).resolves.toEqual({ maxTokens: 8192 })
-    await expect(assemble()).resolves.toMatchObject({ maxTokens: 8192 })
-    await expect(assemble()).resolves.toMatchObject({ maxTokens: 8192 })
-    await controller.configureExecution({ sessionId, maxTokens: null })
-    await expect(assemble()).resolves.toMatchObject({ maxTokens: 300 })
-    expect(agent.session.snapshotEvents().filter(event => event.type === 'session/execution-config').map(event => event.data)).toEqual([{ maxTokens: 8192 }, { maxTokens: null }])
+    for (const maxTokens of [8192, null, 4096]) {
+      agent.session.append('session/execution-config', { maxTokens })
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 0, signal: new AbortController().signal }, () => Promise.resolve(seed))).resolves.toMatchObject({ maxTokens: 300 })
+    }
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'session/execution-config')).toHaveLength(3)
   })
 
-  it('loads a saved budget when the Agent composition is installed after the event', async () => {
+  it('ignores a saved budget when composing an Agent after the event', async () => {
     const { ctx, agent } = await harness()
     onTestFinished(() => ctx.fiber.dispose())
     createSessionTestController(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
     agent.session.append('session/execution-config', { maxTokens: 4096 })
     const activation = await new ApiSessionAgentController(ctx).composeAgent(undefined)
     await activation.setup(ctx, agent)
-    await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 0, signal: new AbortController().signal }, () => Promise.resolve({ provider: 'deepseek-official', model: 'deepseek-chat' }))).resolves.toMatchObject({ maxTokens: 4096 })
-  })
-
-  it('rejects invalid budgets and changes during an active turn without appending settings', async () => {
-    const { ctx, agent, sessionId } = await harness()
-    onTestFinished(() => ctx.fiber.dispose())
-    const controller = createSessionTestController(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
-    for (const maxTokens of [0, -1, 1.5, Number.NaN]) await expect(controller.configureExecution({ sessionId, maxTokens })).rejects.toMatchObject({ code: 'gateway/bad-request' })
-    await expect(controller.configureExecution({ sessionId, maxTokens: 8192 })).rejects.toMatchObject({ code: 'session/agent-busy' })
-    expect(agent.session.snapshotEvents().some(event => event.type === 'session/execution-config')).toBe(false)
+    await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 2, step: 0, signal: new AbortController().signal }, () => Promise.resolve({ provider: 'deepseek-official', model: 'deepseek-chat', maxTokens: 300 }))).resolves.toMatchObject({ maxTokens: 300 })
   })
 })

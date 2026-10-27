@@ -12,8 +12,8 @@ import { packagedImportsPlugin } from './scripts/desktop-bundle-imports.mjs'
 const manifest = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   dependencies: Record<string, string>
 }
-/** electron-builder ships the manifest `dependencies` next to the main bundle; Electron provides `electron` and Node. */
-const mainProcessImports = { packages: new Set(['electron', ...Object.keys(manifest.dependencies)]), nodeBuiltins: true }
+/** electron-builder ships manifest dependencies; Electron provides electron, original-fs and Node. */
+const mainProcessImports = { packages: new Set(['electron', 'original-fs', ...Object.keys(manifest.dependencies)]), nodeBuiltins: true }
 /**
  * The `require` polyfill of a sandboxed preload resolves only these modules
  * (Electron: Process Sandboxing, "Preload scripts").

@@ -5,7 +5,7 @@
  * replacement or header change explains the difference.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime, { createUserMessage, LlmError, ReasoningEffortId  } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelReasoningInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -281,6 +281,33 @@ describe('request stability across the loop', () => {
     expect(header?.type === 'request/header' && header.data.header.config.maxTokens).toBe(256_000)
     expect(header?.type === 'request/header' && header.data.header.adapterDefaults)
       .toEqual({ maxTokens: true })
+  })
+
+  it('resumes without retaining a removed adapter cap and preserves the preceding answer', async () => {
+    const before = new MockAdapter([textResponse('partial answer')], undefined, 8192)
+    const ctx = await harness(before)
+    onTestFinished(() => ctx.fiber.dispose())
+    const agent = await ctx.agentLoop.create(SessionId('removed-deployment-cap'), {
+      provider: 'mock', model: 'mock',
+    })
+    send(agent, 'Complete the report.')
+    await waitForIdle(ctx, agent)
+    expect(before.requests[0]?.maxTokens).toBe(8192)
+    const seed = structuredClone(agent.session.snapshotEvents())
+    const after = new MockAdapter([textResponse('remaining answer')])
+    const resumedCtx = await harness(after)
+    onTestFinished(() => resumedCtx.fiber.dispose())
+    const handle = await resumedCtx.agents.create({
+      sessionId: SessionId('restored-official-defaults'), seed,
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    send(handle.agent, '继续')
+    await waitForIdle(resumedCtx, handle.agent)
+    expect(after.requests[0]?.maxTokens).toBeUndefined()
+    expect(after.requests[0]?.messages).toContainEqual(expect.objectContaining({
+      role: 'assistant', content: [{ type: 'text', text: 'partial answer' }],
+    }))
+    expect(after.requests[0]?.messages.at(-1)?.content).toEqual([{ type: 'text', text: '继续' }])
   })
 
   it('rematerializes the selected adapter maxTokens default after a provider switch', async () => {

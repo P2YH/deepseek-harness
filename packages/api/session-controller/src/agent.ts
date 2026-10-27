@@ -174,7 +174,6 @@ export class ApiSessionAgentController {
   private readonly resumes = new Map<SessionId, Promise<Agent>>()
   private readonly claims = new Map<SessionId, Promise<void>>()
   private readonly selections = new WeakMap<Agent, InstalledSelection>()
-  private readonly executionBudgets = new WeakSet<Agent>()
   private readonly imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
   /** @param ctx - Host context carrying Agent, model, persistence, and Typert services. */
@@ -629,24 +628,6 @@ export class ApiSessionAgentController {
 
   private installSelection(agent: Agent): void {
     this.selectionFor(agent)
-    this.installExecutionBudget(agent)
-  }
-
-  /**
-   * Apply saved execution settings to every subsequent model step of a resident Agent.
-   * @param agent - resident Agent, including one created outside the controller.
-   * @returns after the budget hook is installed once for this Agent.
-   */
-  installExecutionBudget(agent: Agent): void {
-    if (this.executionBudgets.has(agent)) return
-    this.executionBudgets.add(agent)
-    agent.ctx.on('agent/request', async (_payload, next) => {
-      const config = await next()
-      const budget = agent.session.snapshotEvents().findLast(event => event.type === 'session/execution-config')
-      return budget?.type === 'session/execution-config' && budget.data.maxTokens !== null
-        ? { ...config, maxTokens: budget.data.maxTokens }
-        : config
-    })
   }
 
   /**

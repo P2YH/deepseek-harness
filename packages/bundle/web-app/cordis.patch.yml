@@ -42,9 +42,6 @@
           models: [{
             id: 'Qwen3.6-27B',
             name: '核智 Qwen3.6-27B',
-            // Provisional deployment budgets, not advertised server capabilities.
-            contextWindow: 32768,
-            maxTokens: 8192,
             input: ['text', 'image'],
             reasoningEfforts: { off: null, high: 'high' },
           }],
@@ -65,9 +62,6 @@
           models: [{
             id: 'gen-studio-Qwen3.6-27B-ygNP',
             name: '地质科技 Qwen3.6-27B',
-            // Provisional deployment budgets; the screenshot provides no capacity limits.
-            contextWindow: 32768,
-            maxTokens: 8192,
             input: ['text'],
           }],
         },

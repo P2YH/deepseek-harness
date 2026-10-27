@@ -8,6 +8,7 @@ import { resolveDesktopPaths } from '../src/paths.ts'
 import { runtimeFixture } from './runtime-fixture.ts'
 import { createElectronBuilderConfig } from '../scripts/electron-builder-config.mjs'
 import { loadDesktopPackageEnvironment } from '../scripts/desktop-package-environment.mjs'
+import { verifyBundledPlugins } from '../src/bundled-plugins.ts'
 
 const roots: string[] = []
 const failure = vi.hoisted(() => ({ receipt: false }))
@@ -57,6 +58,79 @@ function enableBundledUpgrades(resources: string): void {
   for (const plugin of inventory.plugins) plugin.updateExisting = true
   writeFileSync(file, JSON.stringify(inventory))
 }
+
+function addPet(resources: string): void {
+  const directory = join(resources, 'dsh-pet')
+  mkdirSync(join(directory, 'package/lib'), { recursive: true })
+  mkdirSync(join(directory, 'electron/resources'), { recursive: true })
+  const hash = (body: string): string => createHash('sha256').update(body).digest('hex')
+  const contents = {
+    'package.json': JSON.stringify({ name: 'dsh-pet', version: '0.3.8-offline.1', dsh: { bundle: { patch: './cordis.patch.yml' } } }),
+    'lib/index.js': 'export default {}\n',
+    'cordis.patch.yml': '[]\n',
+  }
+  const files = Object.entries(contents).map(([path, body]) => {
+    writeFileSync(join(directory, 'package', path), body)
+    return { path, sha256: hash(body) }
+  })
+  const electronFiles = Object.entries({ 'electron.exe': 'offline electron', 'resources/default_app.asar': 'helper runtime' }).map(([path, body]) => {
+    writeFileSync(join(directory, 'electron', path), body)
+    return { path, sha256: hash(body) }
+  })
+  writeFileSync(join(directory, 'plugin.tgz'), 'offline pet archive')
+  const file = join(resources, 'plugins.json')
+  const inventory = JSON.parse(readFileSync(file, 'utf8'))
+  inventory.plugins.push({ name: 'dsh-pet', version: '0.3.8-offline.1', sha256: hash('offline pet archive'), updateExisting: true, files, electronFiles })
+  writeFileSync(file, JSON.stringify(inventory))
+}
+
+it('installs and enables the offline pet with its complete runtime, retaining user settings and later removal', async () => {
+  const { resources, manager, manifest } = setup()
+  addPet(resources)
+  verifyBundledPlugins(resources)
+  expect(createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_BUNDLED_PLUGINS_DIR: resources }, 'win32', 'x64').extraMetadata.dshBundledPlugins).toBe(true)
+  await manager.applyRelease()
+  expect(manifest().dsh.profile.bundles).toContain('dsh-pet')
+  expect(manifest().dsh.profile.bundles).toContain('dsh-plugin-office-agents')
+  expect(readFileSync(join(manager.paths.home, 'electron/resources/default_app.asar'), 'utf8')).toBe('helper runtime')
+  const archive = manifest().dependencies['dsh-pet']!
+  expect(existsSync(join(manager.paths.profile, archive.slice('file:./'.length), '../electron'))).toBe(false)
+  mkdirSync(join(manager.paths.home, 'dsh-pet'))
+  writeFileSync(join(manager.paths.home, 'dsh-pet/config.json'), '{"custom":true}')
+  writeFileSync(join(manager.paths.home, 'electron/electron.exe'), 'user runtime')
+  await manager.applyRelease()
+  expect(readFileSync(join(manager.paths.home, 'electron/electron.exe'), 'utf8')).toBe('user runtime')
+  expect(readFileSync(join(manager.paths.home, 'dsh-pet/config.json'), 'utf8')).toBe('{"custom":true}')
+  const removed = manifest()
+  delete removed.dependencies['dsh-pet']
+  removed.dsh.profile.bundles = removed.dsh.profile.bundles.filter(name => name !== 'dsh-pet')
+  writeFileSync(join(manager.paths.profile, 'package.json'), JSON.stringify(removed))
+  await manager.applyRelease()
+  expect(manifest().dependencies).not.toHaveProperty('dsh-pet')
+})
+
+it('rejects damaged pet runtime before publishing plugin projections or a partial runtime', async () => {
+  const { resources, manager, manifest } = setup()
+  addPet(resources)
+  writeFileSync(join(resources, 'dsh-pet/electron/electron.exe'), 'damaged')
+  expect(() => verifyBundledPlugins(resources)).toThrow(/Electron file mismatch/u)
+  await expect(manager.applyRelease()).rejects.toThrow(/Electron file mismatch/u)
+  expect(manifest().dependencies).not.toHaveProperty('dsh-pet')
+  expect(existsSync(join(manager.paths.home, 'electron'))).toBe(false)
+})
+
+it('repairs a missing pet runtime without re-enabling a disabled installed pet', async () => {
+  const { resources, manager, manifest } = setup()
+  addPet(resources)
+  await manager.applyRelease()
+  const disabled = manifest()
+  disabled.dsh.profile.bundles = disabled.dsh.profile.bundles.filter(name => name !== 'dsh-pet')
+  writeFileSync(join(manager.paths.profile, 'package.json'), JSON.stringify(disabled))
+  rmSync(join(manager.paths.home, 'electron'), { recursive: true })
+  await manager.applyRelease()
+  expect(existsSync(join(manager.paths.home, 'electron/electron.exe'))).toBe(true)
+  expect(manifest().dsh.profile.bundles).not.toContain('dsh-pet')
+})
 
 it('upgrades installed deployment plugins with backups while retaining disabled choices and business data', async () => {
   const { resources, manager, manifest } = setup()
