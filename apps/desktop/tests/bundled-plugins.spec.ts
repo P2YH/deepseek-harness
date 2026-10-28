@@ -79,7 +79,7 @@ function addPet(resources: string): void {
   })
   writeFileSync(join(directory, 'plugin.tgz'), 'offline pet archive')
   const file = join(resources, 'plugins.json')
-  const inventory = JSON.parse(readFileSync(file, 'utf8'))
+  const inventory = JSON.parse(readFileSync(file, 'utf8')) as { plugins: Record<string, unknown>[] }
   inventory.plugins.push({ name: 'dsh-pet', version: '0.3.8-offline.1', sha256: hash('offline pet archive'), updateExisting: true, files, electronFiles })
   writeFileSync(file, JSON.stringify(inventory))
 }
@@ -113,7 +113,7 @@ it('rejects damaged pet runtime before publishing plugin projections or a partia
   const { resources, manager, manifest } = setup()
   addPet(resources)
   writeFileSync(join(resources, 'dsh-pet/electron/electron.exe'), 'damaged')
-  expect(() => verifyBundledPlugins(resources)).toThrow(/Electron file mismatch/u)
+  expect(() => { verifyBundledPlugins(resources) }).toThrow(/Electron file mismatch/u)
   await expect(manager.applyRelease()).rejects.toThrow(/Electron file mismatch/u)
   expect(manifest().dependencies).not.toHaveProperty('dsh-pet')
   expect(existsSync(join(manager.paths.home, 'electron'))).toBe(false)
