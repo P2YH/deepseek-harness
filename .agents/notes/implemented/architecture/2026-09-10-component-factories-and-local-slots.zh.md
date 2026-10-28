@@ -72,6 +72,8 @@ Factory scope 跟随 occurrence 所在 React 位置的 scope binding。`renderFa
 
 Factory 不拥有 Conversation store。普通 `conversation.session` body 与 `conversation.session.header` 保留同一个 strict-Session handle，在保持草稿与 View 选择 identity 的同时，避免将该 handle 同时挂到 `session` 和 `session-maybe` scope。
 
+`conversation.embedded` Factory 通过显式的宿主工作区导航和实例局部的记录查看模式组合 `conversation.content`。业务宿主因此使用 Slot 契约，无需跨插件导入组件。记录查看模式移除包含业务接管组件的输入框链，不保留禁用的可编辑子树；它不赋予会话权限。宿主负责持有引用，并通过卸载隐藏可编辑实例，因为会话输入运行时只拥有一个编辑器根节点。
+
 ### 类型与运行时强制规则
 
 类型链拒绝未知 Factory 名、缺失或多余的 occurrence props、与 `SlotMap` 不一致的 child spec、与 `SlotFactoryMap` 不一致的 definition 字段、嵌套 store factory、未知局部名称、不兼容的选中 Component，以及 input、registration、injection 与 scope props 之间的所有权重叠。

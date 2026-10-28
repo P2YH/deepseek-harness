@@ -285,6 +285,10 @@ With `D` registered Definitions, one incoming scalar event or packed run perform
 
 `publication` controls when changed State is materialized. Use `immediate` for structural or terminal changes, `animation-frame` for high-frequency visible deltas, and `none` when the State change feeds only a later publication. The engine applies every scalar update in log order and every packed run in one batch update; cadence only coalesces view publication.
 
+## Embedded presentation
+
+The `conversation.embedded` Factory uses the inherited `session-maybe` scope and forwards `phase`, `hero`, `readOnly`, and `onSelectWorkspace` to `conversation.content` with `variant: 'embedded'`. The host retains and releases the `SessionReference` and supplies it through `SessionProvider`. `readOnly` omits the composer chain, including takeovers; it is a presentation choice rather than a Session permission. `onSelectWorkspace` replaces main-view navigation, returns a Promise, and owns any draft transfer. A rejected Promise restores the previous workspace label. The default `conversation.content` behavior remains main-view navigation when this callback is absent.
+
 ## Verification obligations
 
 Add focused tests that establish these outcomes:
@@ -299,3 +303,5 @@ Add focused tests that establish these outcomes:
 8. Creating a target source performs no builder work; explicit selection or the first subscription performs one complete replacement, later updates reach every active target, and repeated activation performs no replacement.
 
 Use [`packages/client/ui-chat/src/client/conversation-nodes/assistant.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/assistant.ts) for streaming and interruption, [`inbox.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/inbox.ts) plus [`message.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/message.ts) for predecessor queries, and [`packages/client/ui-deliverables`](../../packages/client/ui-deliverables) for a Definition that publishes Turn data without creating its own Node.
+
+The `conversation.header.content` Factory owns the native header child Slots and accepts `embedded` and optional `onOpenSession`. The embedded presentation suppresses main-frame leading controls and passes local ancestry navigation into the Session header. `conversation.embedded` renders this Factory before the shared content; registered Session utilities and View selection use the inherited Session binding.

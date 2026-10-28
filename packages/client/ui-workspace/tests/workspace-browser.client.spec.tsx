@@ -138,6 +138,8 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     useDirectoryFlow: bindSnapshotSelector({ getSnapshot: () => true, subscribe: () => () => {} }),
     useHostInfo: selector => selector({ home: undefined, isLoopback: true }),
     renderSlot: renderDirectoryFlowOnly,
+    renderFactorySlot: () => null,
+    useFactorySlot: () => () => null,
     t,
     ...overrides,
   }
@@ -152,6 +154,35 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it.each(['workspace', 'flat'] as const)('keeps embedded %s selection and opening local to its presentation', (groupBy) => {
+    const openSession = vi.fn(), startSession = vi.fn()
+    const b = mount({
+      navigation: { sessionId: sid('embedded'), openSession, startSession },
+      usePanelInfo: selector => selector({ activePanelId: 'office-agents' as MainPanelId }),
+      useSessions: hook(sessionState([summary('embedded', 20), summary('main', 10, { retainedBy: { mainView: 1 } })])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['embedded', 'main'])])),
+    })
+    act(() => { b.store.actions.setGroupBy(groupBy) })
+    const selected = screen.getByText('embedded').closest('[role="treeitem"]')
+    expect(selected?.getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByText('main'))
+    expect(openSession).toHaveBeenCalledWith(sid('main'))
+    expect(b.props.open).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
+    expect(b.controls.state.getSnapshot().searchRequest).toBe(0)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'embedded' } })
+    fireEvent.click(screen.getByText('embedded'))
+    expect(openSession).toHaveBeenCalledWith(sid('embedded'))
+    b.view.unmount()
+  })
+
+  it('opens only the embedded directory flow when adding a Workspace', () => {
+    const b = mount({ navigation: { openSession: vi.fn(), startSession: vi.fn() } })
+    fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
+    expect(b.controls.state.getSnapshot().addRequested).toBe(false)
+    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+  })
+
   it.each(['workspace', 'flat', 'ungrouped'] as const)('keeps %s recency independent of arrival order and saved manual positions', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()

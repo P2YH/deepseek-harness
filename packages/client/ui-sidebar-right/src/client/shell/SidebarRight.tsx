@@ -350,9 +350,11 @@ function SidebarPanel(panel: PanelProps & { width: number; panelRef: RefObject<H
  * measured and the automatic fullscreen rule of its frame width.
  */
 export function RightbarSeat({
-  sessionId, width, viewportWidth, canShow, useStore, actions, t, renderSlot, syncPresentation, measureRoom, reportAutoFullscreen,
+  sessionId, width, viewportWidth, canShow, useStore, actions, t, renderSlot,
+  syncPresentation: framePresentation, onPresentation, measureRoom, reportAutoFullscreen,
   openTab, closeTab, useTabTypes, useTabNavigation, occurrence, retainTab, active, useShortcuts, splitPane, toggleFullscreen,
 }: RightbarSeatProps): ReactNode {
+  const syncPresentation = onPresentation ?? framePresentation
   // One store instance per session, so this map holds this session's surface.
   const shortcuts = useShortcuts(entries => entries)
   const surface = useStore(state => state.bySession[sessionId])

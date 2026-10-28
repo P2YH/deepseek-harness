@@ -47,6 +47,7 @@ import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './sh
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
+import { SidebarWorkspaceBrowser } from './rows/SidebarWorkspaceBrowser.tsx'
 import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog } from './session-actions/ArchiveSession.tsx'
 import { derive } from './session-actions/derived.ts'
 import { ForkSessionMenuItem } from './session-actions/ForkSession.tsx'
@@ -289,27 +290,30 @@ export function apply(ctx: Context): void {
   })
   // Each registration declares its owned children in the same call; slot
   // injection follows both the owner and declaration HMR lifetimes.
-  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
-    {
-      name: 'sidebar.workspaces',
-      children: {
-        'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
-        // Every row entry reads the menu's open state through a hook bound
-        // from the row's render occurrence (the owner passes the state pair
-        // as hookContext).
-        'sidebar.workspaces.session.menu.item': {
-          kind: 'list', scope: 'root', inject: { hooks: { menuOpenState: menuOpenStateFactory, shortcuts: ctx.shortcuts.catalog } },
+  ctx.slots.inject('sidebar.workspaces', function* () {
+    yield ctx.slots.registerFactory(
+      {
+        name: 'workspace.browser', scope: 'root',
+        children: {
+          'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' },
+          // Every row entry reads the menu's open state through a hook bound
+          // from the row's render occurrence (the owner passes the state pair
+          // as hookContext).
+          'sidebar.workspaces.session.menu.item': {
+            kind: 'list', scope: 'root', inject: { hooks: { menuOpenState: menuOpenStateFactory, shortcuts: ctx.shortcuts.catalog } },
+          },
+          'sidebar.workspaces.session.row.action': { kind: 'list', scope: 'root' },
+          'sidebar.session.row.leading': { kind: 'list', scope: 'root' },
+          'sidebar.session.row.hover': { kind: 'list', scope: 'root' },
         },
-        'sidebar.workspaces.session.row.action': { kind: 'list', scope: 'root' },
-        'sidebar.session.row.leading': { kind: 'list', scope: 'root' },
-        'sidebar.session.row.hover': { kind: 'list', scope: 'root' },
+        store: viewStore,
+        inject: browserInjected,
+        locale: NS,
       },
-      store: viewStore,
-      inject: browserInjected,
-      locale: NS,
-    },
-    WorkspaceBrowser,
-  ))
+      WorkspaceBrowser,
+    )
+    yield ctx.slots.register({ name: 'sidebar.workspaces', store: viewStore, inject: browserInjected, locale: NS }, SidebarWorkspaceBrowser)
+  })
   // The shipped row actions take the same route as a plugin's: `slots.inject`
   // waits for the browser registration above to declare each list, and the
   // entries leave with it. Explicit orders leave room for plugin entries.

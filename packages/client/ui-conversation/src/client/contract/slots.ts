@@ -217,6 +217,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       owner: {
         /** Parent-owned visibility shared with the header container styling. */
         hideChrome: boolean
+        /** Presentation-host navigation for ancestry links. */
+        onOpenSession?: ((sessionId: SessionId) => void) | undefined
       }
     }
     /** Optional replacement for one Session breadcrumb title. */
@@ -299,6 +301,29 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 
   interface SlotFactoryMap {
+    /** Native header shared by the main Conversation and embedded hosts. */
+    'conversation.header.content': {
+      scope: 'session-maybe'
+      props: {
+        embedded?: boolean
+        onOpenSession?: ((sessionId: SessionId) => void) | undefined
+      }
+      children: {
+        'conversation.header.leading': { kind: 'single'; scope: 'root' }
+        'conversation.session.header': { kind: 'single'; scope: 'session' }
+      }
+    }
+    /** Embedded Conversation with host-local Workspace navigation and optional transcript-only presentation. */
+    'conversation.embedded': {
+      scope: 'session-maybe'
+      props: {
+        phase: ConversationContentInputProps['phase']
+        hero: boolean
+        readOnly: boolean
+        onSelectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
+        onOpenSession?: ((sessionId: SessionId) => void) | undefined
+      }
+    }
     /** Reusable Conversation content instantiated by presentation hosts. */
     'conversation.content': {
       scope: 'session-maybe'
@@ -536,6 +561,16 @@ export interface ConversationContentInputProps {
   variant: 'main' | 'embedded'
   phase: 'settling' | 'hero' | 'active'
   hero: boolean
+  /**
+   * Omit the composer and its interaction takeovers for a transcript-only occurrence.
+   * Does not restrict other occurrences of this Session.
+   */
+  readOnly?: boolean
+  /**
+   * Select a Workspace within the presentation host. The host owns draft handling and selection on rejection.
+   * Omission uses main-view navigation; rejection rolls back the pending Workspace label.
+   */
+  onSelectWorkspace?: (workspaceId: WorkspaceId) => Promise<void>
 }
 
 /** Values passed from shared content to its occurrence-selected width controls. */
@@ -568,8 +603,7 @@ export type ConversationSessionSlotProps =
 
 /** Full props of the resident navigation header. */
 export type ConversationHeaderProps =
-  PropsRuntime<'conversation.header'>
-  & PropsRenderSlots<'conversation.header.leading' | 'conversation.session.header'>
+  FactoryComponentPropsOf<'conversation.header.content'>
 
 /** Full props of the strict Session header. */
 export type ConversationSessionHeaderSlotProps =

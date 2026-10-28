@@ -57,7 +57,7 @@ export class SidebarSessionView {
    * @param signal - occurrence lifetime; closing and undoing a tab creates a new lifetime.
    * @returns idempotent release of this body's hold.
    */
-  readonly retainTab = (tabId: TabId, signal: AbortSignal): (() => void) => {
+  readonly retainTab: (tabId: TabId, signal: AbortSignal) => () => void = (tabId, signal) => {
     if (signal.aborted || this.disposed) return () => {}
     this.tabs.set(tabId, (this.tabs.get(tabId) ?? 0) + 1)
     let held = true

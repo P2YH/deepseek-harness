@@ -54,6 +54,19 @@ export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
 export type { SettingsKey } from './locales.ts'
 
+/** Window-local navigation into the shared settings shell. */
+export interface SettingsNavigation {
+  /** Open settings while preserving the selected section. */
+  open(): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Open the settings shell without changing the active main panel. */
+    settingsNavigation: SettingsNavigation
+  }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** Shell chrome + shell-owned General section copy. */
@@ -180,6 +193,7 @@ export function apply(ctx: ClientContext): void {
     const shellHandle = createSettingsShellStore()
     const shellInstance = shellHandle.create()
     const shellStore: typeof shellHandle = { ...shellHandle, create: () => shellInstance }
+    const disposeNavigation = ctx.provide('settingsNavigation', { open: () => { shellInstance.actions.open() } } satisfies SettingsNavigation)
     const disposeCommand = ctx.shortcuts.register({
       id: 'settings.open' as ShortcutCommandId, label: () => t('shortcut.open'), aliases: ['settings', 'preferences'],
       defaults: {
@@ -214,7 +228,7 @@ export function apply(ctx: ClientContext): void {
       },
       inject: shellInjected,
     }, SettingsRoot)
-    return () => { disposeCommand(); disposeSlot() }
+    return () => { disposeNavigation(); disposeCommand(); disposeSlot() }
   })
 
   ctx.slots.inject('settings.trigger', () =>

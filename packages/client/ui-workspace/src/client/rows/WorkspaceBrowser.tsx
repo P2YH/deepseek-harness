@@ -253,7 +253,7 @@ function workspaceGroupHalf(e: { clientY: number; currentTarget: HTMLElement }):
 type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessionStatus' | 'startSession' | 'open'
-  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo'
+  | 'insertWorkspaceBefore' | 't' | 'usePanelInfo' | 'navigation'
 > & PropsRenderSlots<
   | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
@@ -317,7 +317,7 @@ function EmptySessions({ rowState, onLeaveArchivedOnly, t }: Pick<SessionTreePro
 function SessionTree({
   list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds,
   rowState, onLeaveArchivedOnly,
-  workspaceReady, animationResetKey, usePanelInfo,
+  workspaceReady, animationResetKey, usePanelInfo, navigation,
   onRenameRequest, onDeleteRequest, onSessionRenameRequest,
   renderSlot,
   insertWorkspaceBefore,
@@ -327,7 +327,7 @@ function SessionTree({
 }: SessionTreeProps) {
   const panelActive = usePanelInfo(info => info.activePanelId !== null)
   const statuses = useSessionStatus(s => s)
-  const current = panelActive
+  const current = navigation !== undefined ? navigation.sessionId : panelActive
     ? undefined
     : Object.values(list.byId).find(session => (session.retainedBy.mainView ?? 0) > 0)?.id
   const revealGroup = revealSessionId === undefined || !workspaceReady
@@ -688,7 +688,7 @@ function SessionTree({
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
   list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, open, onSessionRenameRequest,
-  usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
+  usePanelInfo, navigation, setSessionOrder, workspaceReady, animationResetKey,
   revealSessionId, onSessionRevealed, renderSlot, t,
 }: Pick<
   SessionTreeProps,
@@ -697,6 +697,7 @@ function FlatList({
   | 'onSessionRenameRequest'
   | 'renderSlot'
   | 'usePanelInfo'
+  | 'navigation'
   | 'setSessionOrder'
   | 'workspaceReady'
   | 'animationResetKey'
@@ -718,7 +719,7 @@ function FlatList({
   const [drag, setDrag] = useState<DragState | null>(null)
   const dropCommitted = useRef(false)
   useNativeDragAcceptance(drag !== null)
-  const currentId = panelActive
+  const currentId = navigation !== undefined ? navigation.sessionId : panelActive
     ? undefined
     : Object.values(list.byId).find(session => (session.retainedBy.mainView ?? 0) > 0)?.id
   const commitDrag = (activeDrag: DragState, over: NonNullable<DragState['over']>): void => {
@@ -807,9 +808,9 @@ function SearchResults({
   query,
   remote,
   resultLimit,
-  usePanelInfo,
+  usePanelInfo, navigation,
   t,
-}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo'> & {
+}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo' | 'navigation'> & {
   workspaces: readonly WorkspaceView[]
   archivedSessionIds: readonly SessionNode['id'][]
   /** Search matches follow the archived filter selected for the list. */
@@ -840,7 +841,7 @@ function SearchResults({
     [list, workspaces, query, archivedSessionIds, archivedFilter, statuses, currentRemote, resultLimit],
   )
   const pending = currentRemote.status === 'loading'
-  const currentId = panelActive
+  const currentId = navigation !== undefined ? navigation.sessionId : panelActive
     ? undefined
     : Object.values(list.byId).find(session => (session.retainedBy.mainView ?? 0) > 0)?.id
 
@@ -902,8 +903,9 @@ export function WorkspaceBrowser({
   useWorkspaces,
   useStore,
   actions,
-  startSession,
-  open,
+  startSession: defaultStartSession,
+  open: defaultOpen,
+  navigation,
   requestSessionRename,
   notifyArchivedNotOpenable,
   renameWorkspace,
@@ -917,18 +919,30 @@ export function WorkspaceBrowser({
   useHostInfo,
   useShortcuts,
   useWorkspaceShortcuts,
-  requestSearch,
-  requestAddWorkspace,
-  closeAddWorkspace,
+  requestSearch: defaultRequestSearch,
+  requestAddWorkspace: defaultRequestAddWorkspace,
+  closeAddWorkspace: defaultCloseAddWorkspace,
   setDirectoryBusy,
   renderSlot,
   t,
 }: WorkspaceBrowserProps) {
+  const open = navigation?.openSession ?? defaultOpen
+  const startSession = navigation?.startSession ?? defaultStartSession
   const home = useHostInfo(info => info.home)
   const shortcuts = useShortcuts(rows => rows)
   const searchShortcut = shortcuts.find(row => row.id === 'session.search')
   const addShortcut = shortcuts.find(row => row.id === 'workspace.add')
-  const shortcutState = useWorkspaceShortcuts(state => state)
+  const globalShortcutState = useWorkspaceShortcuts(state => state)
+  const [localSearchRequest, setLocalSearchRequest] = useState(0)
+  const [localAddRequested, setLocalAddRequested] = useState(false)
+  const shortcutState = navigation === undefined ? globalShortcutState
+    : { searchRequest: localSearchRequest, addRequested: localAddRequested }
+  const requestSearch = navigation === undefined ? defaultRequestSearch
+    : () => { setLocalSearchRequest(value => value + 1) }
+  const requestAddWorkspace = navigation === undefined ? defaultRequestAddWorkspace
+    : () => { setLocalAddRequested(true) }
+  const closeAddWorkspace = navigation === undefined ? defaultCloseAddWorkspace
+    : () => { setLocalAddRequested(false) }
   // Ordering remains live while the rail or search replaces the list body.
   const list = useSessions(state => state)
   const storedWorkspaces = useWorkspaces(state => state.items)
@@ -967,7 +981,7 @@ export function WorkspaceBrowser({
   }
   const leaveArchivedOnly = (): void => { actions.setArchivedFilter('default') }
   const workspaceReady = workspacePhase === 'ready' && workspaceStreamState !== 'loading'
-  const mainSessionId = Object.values(list.byId)
+  const mainSessionId = navigation !== undefined ? navigation.sessionId : Object.values(list.byId)
     .find(session => (session.retainedBy.mainView ?? 0) > 0)?.id
   const currentBlank = mainSessionId !== undefined && list.byId[mainSessionId]?.blank === true
     ? mainSessionId
@@ -1404,6 +1418,7 @@ export function WorkspaceBrowser({
           ? (
             <SearchResults
               usePanelInfo={usePanelInfo}
+              navigation={navigation}
               useSessions={useSessions}
               useSessionStatus={useSessionStatus}
               open={openSearchResult}
@@ -1421,6 +1436,7 @@ export function WorkspaceBrowser({
             ? (
               <FlatList
                 usePanelInfo={usePanelInfo}
+                navigation={navigation}
                 list={list}
                 sessionIds={orderedFlatSessionIds}
                 rowState={rowState}
@@ -1440,6 +1456,7 @@ export function WorkspaceBrowser({
             : (
               <SessionTree
                 usePanelInfo={usePanelInfo}
+                navigation={navigation}
                 list={list}
                 shortcuts={shortcuts}
                 useSessionStatus={useSessionStatus}

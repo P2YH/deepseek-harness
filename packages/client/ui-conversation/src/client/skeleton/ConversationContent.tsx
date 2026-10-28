@@ -123,7 +123,7 @@ export function ConversationContent(props: ConversationContentProps) {
         onPick: (workspaceId) => {
           setPickerOpen(false)
           setPendingWorkspaceId(workspaceId)
-          void selectWorkspace(workspaceId).catch(() => {
+          void (props.onSelectWorkspace ?? selectWorkspace)(workspaceId).catch(() => {
             setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
           })
         },
@@ -144,7 +144,7 @@ export function ConversationContent(props: ConversationContentProps) {
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
   const blocked = !inert && composerBlock !== undefined
-  const inputBar = renderSlot('conversation.composer.bar', {
+  const inputBar = props.readOnly ? null : renderSlot('conversation.composer.bar', {
     variant: hero ? 'hero' : 'composer',
     ...(inert
       ? {
@@ -170,7 +170,7 @@ export function ConversationContent(props: ConversationContentProps) {
     </div>
   )
 
-  const composer = renderSlotChain(
+  const composer = props.readOnly ? null : renderSlotChain(
     'conversation.composer',
     { sessionId, session, pendingInteraction },
     { fallback: composerBar, fallbackOnly: sessionId === undefined, overlay: true },
@@ -197,7 +197,7 @@ export function ConversationContent(props: ConversationContentProps) {
     >
       <div className={css.scrollBody} data-conversation-scroll="">
         {sessionId === undefined ? null : <Views />}
-        {composerSeat}
+        {props.readOnly ? null : composerSeat}
       </div>
       <WidthControls container={body} phase={phase} />
     </div>

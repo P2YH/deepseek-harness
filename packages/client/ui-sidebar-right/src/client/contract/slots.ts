@@ -30,6 +30,9 @@ import type { PaneId, TabId, TabRecord } from '@deepseek-ai/dsh-client-ui-dockki
 import type { SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TabHookContext } from '../tab-info.ts'
 import type { SidebarRightKey } from '../locales.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { RightbarRootInjected } from '../shell/RightbarRoot.tsx'
+import type { SidebarRightPresentation } from '../shell/SidebarRight.tsx'
 import type { SidebarRightNavigationParams, SidebarRightResourceParams, SidebarRightTabParamsFor } from './params.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -45,6 +48,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: RightbarOwnerProps & {
         readonly active: boolean
+        /** Embedded hosts own their geometry instead of resizing the main frame. */
+        readonly onPresentation?: ((presentation: SidebarRightPresentation) => void) | undefined
         /** @param tabId - retained body. @param signal - tab occurrence lifetime. @returns releases the View-owned hold. */
         readonly retainTab: (tabId: TabId, signal: AbortSignal) => () => void
       }
@@ -101,6 +106,20 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * registrant the menu shows only the kit's own layout actions.
      */
     'sidebar.right.tab.menu.item': { kind: 'list'; scope: 'session'; owner: SidebarRightTabMenuOwnerProps }
+  }
+
+  interface SlotFactoryMap {
+    /** Native Sidebar with an explicit main or embedded presentation owner. */
+    'sidebar.right.browser': {
+      scope: 'root'
+      props: RightbarOwnerProps & {
+        placement: 'main' | 'embedded'
+        target?: SessionId
+        onPresentation?: ((presentation: SidebarRightPresentation) => void) | undefined
+      }
+      children: { 'rightbar.session': { kind: 'single'; scope: 'session' } }
+      inject: RightbarRootInjected
+    }
   }
 }
 

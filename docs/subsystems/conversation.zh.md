@@ -287,6 +287,10 @@ Assembler 会记录这项依赖。如果后续 older prepend 带来了更近的�
 
 `publication` 控制发生 State 变更后何时物化。结构或 terminal 变化使用 `immediate`，高频可见 delta 使用 `animation-frame`，只为后续发布积累 State 时使用 `none`。引擎按日志顺序应用每条 scalar update，并用一次 batch update 应用一个 packed run；该选项只合并视图发布频率。
 
+## 内嵌展示
+
+`conversation.embedded` Factory 使用继承的 `session-maybe` scope，以 `variant: 'embedded'` 将 `phase`、`hero`、`readOnly` 和 `onSelectWorkspace` 转发给 `conversation.content`。宿主持有并释放 `SessionReference`，通过 `SessionProvider` 提供该引用。`readOnly` 省略包含接管组件的输入框链；它是展示选择，不是会话权限。`onSelectWorkspace` 替换主视图导航，返回 Promise，并负责草稿转移。Promise 拒绝时恢复先前的工作区标签。未提供此回调时，`conversation.content` 默认仍使用主视图导航。
+
 ## 验证要求
 
 添加聚焦测试，证明以下结果：
@@ -301,3 +305,5 @@ Assembler 会记录这项依赖。如果后续 older prepend 带来了更近的�
 8. 创建 target source 不执行 builder 工作；显式选择或首次订阅执行一次完整 replace，后续更新送达所有 active target，重复激活不会再次 replace。
 
 流式与中断处理可参考 [`packages/client/ui-chat/src/client/conversation-nodes/assistant.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/assistant.ts)，前序查询可参考 [`inbox.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/inbox.ts) 与 [`message.ts`](../../packages/client/ui-chat/src/client/conversation-nodes/message.ts)，只发布 Turn data 而不创建自有 Node 的例子见 [`packages/client/ui-deliverables`](../../packages/client/ui-deliverables)。
+
+`conversation.header.content` Factory 声明原生工具栏的子 Slot，接收 `embedded` 和可选的 `onOpenSession`。嵌入呈现省略主框架前导控件，并向 Session 工具栏传入宿主内的祖先会话导航。`conversation.embedded` 在共享内容之前渲染该 Factory；已注册的 Session 工具和视图选择使用继承的 Session 绑定。

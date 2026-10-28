@@ -39,7 +39,7 @@
  * retain every listed Session.
  */
 import type {
-  HostObservable, InjectFace, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore, SlotHookFactory,
+  FactoryComponentPropsOf, HostObservable, InjectFace, PropsHooks, PropsLocale, PropsRenderSlots, PropsRuntime, SlotHookFactory,
 } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pull the owner SlotMap merges into programs that resolve the
 // runtime shares below.
@@ -114,6 +114,38 @@ export interface SessionRowScheduleOwnerProps {
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    /** Native Workspace browser with optional presentation-local Session navigation. */
+    'workspace.browser': {
+      scope: 'root'
+      props: {
+        wide: boolean
+        expandSidebar: () => void
+        navigation?: {
+          sessionId?: SessionId
+          openSession: (sessionId: SessionId) => void
+          startSession: (workspaceId?: WorkspaceId) => void
+        } | undefined
+      }
+      children: {
+        'sidebar.workspaces.directoryFlow': { kind: 'single'; scope: 'root' }
+        'sidebar.workspaces.session.menu.item': {
+          kind: 'list'
+          scope: 'root'
+          inject: { hooks: {
+            menuOpenState: SlotHookFactory<'sidebar.workspaces.session.menu.item', UseMenuOpenState>
+            shortcuts: HostObservable<readonly ShortcutCatalogEntry[]>
+          } }
+        }
+        'sidebar.workspaces.session.row.action': { kind: 'list'; scope: 'root' }
+        'sidebar.session.row.leading': { kind: 'list'; scope: 'root' }
+        'sidebar.session.row.hover': { kind: 'list'; scope: 'root' }
+      }
+      store: WorkspaceViewStoreHandle
+      inject: WorkspaceBrowserInjected
+      locale: 'workspace'
+    }
+  }
   interface SlotMap {
     /** Directory-flow hole under the conversation empty-state picker (declared by the WorkspacePicker entry). */
     'conversation.hero.workspace.directoryFlow': { kind: 'single'; scope: 'root'; owner: DirectoryFlowOwnerProps }
@@ -465,19 +497,7 @@ export type RowToastProps =
   & PropsHooks<RowToastInjected['hooks']>
 
 /** Full browser props: shell owner share + viewing store + injected actions + the locale seat. */
-export type WorkspaceBrowserProps =
-  PropsRuntime<'sidebar.workspaces'>
-  & PropsRenderSlots<
-    | 'sidebar.workspaces.directoryFlow'
-    | 'sidebar.workspaces.session.menu.item'
-    | 'sidebar.workspaces.session.row.action'
-    | 'sidebar.session.row.leading'
-    | 'sidebar.session.row.hover'
-  >
-  & PropsStore<WorkspaceViewStoreHandle>
-  & Omit<WorkspaceBrowserInjected, 'hooks'>
-  & PropsHooks<WorkspaceBrowserInjected['hooks']>
-  & PropsLocale<'workspace'>
+export type WorkspaceBrowserProps = FactoryComponentPropsOf<'workspace.browser'>
 
 /**
  * Picker-private injected share. Pick semantics remain in the owner's onPick

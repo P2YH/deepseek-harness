@@ -38,6 +38,8 @@ import { ExpandButton } from './shell/ExpandButton.tsx'
 import { RightbarSeat, type SidebarRightInjected } from './shell/SidebarRight.tsx'
 import { closeWithPaneFocus, openWithPaneFocus } from './shell/close-focus.ts'
 import { RightbarRoot, type RightbarRootInjected } from './shell/RightbarRoot.tsx'
+import { MainRightbar } from './shell/MainRightbar.tsx'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { SidebarSessionViews } from './session-views.ts'
 import { createSidebarRightController, type SidebarRightController } from './service.ts'
 import { SidebarRightTabRegistry } from './tab-registry.ts'
@@ -109,12 +111,17 @@ export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   const tabs = new SidebarRightTabRegistry(ctx)
   const views = new SidebarSessionViews(ctx.sessions)
+  const embedded = createSnapshotStore<{ readonly sessionId: SessionId | undefined } | null>(null)
   ctx.effect(() => {
     const current = ctx.uiSession.adapter.current
-    const sync = (): void => { views.select(current.getSnapshot().key as SessionId | undefined) }
+    const sync = (): void => {
+      const owner = embedded.getSnapshot()
+      views.select(owner === null ? current.getSnapshot().key as SessionId | undefined : owner.sessionId)
+    }
     const unsubscribe = current.subscribe(sync)
+    const unsubscribeEmbedded = embedded.subscribe(sync)
     sync()
-    return () => { unsubscribe(); views.dispose() }
+    return () => { unsubscribeEmbedded(); unsubscribe(); views.dispose() }
   }, 'ui-sidebar-right: retained Session views')
   const layout: ILayout = ctx.layout
   // The automatic fullscreen rule as the seats last rendered it: the frame
@@ -136,13 +143,15 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     const sync = (): void => {
       const selected = views.source.getSnapshot().find(view => view.selected)
-      show(layout.panelInfo.getSnapshot().activePanelId === null ? selected?.sessionId : undefined)
+      show(embedded.getSnapshot() !== null || layout.panelInfo.getSnapshot().activePanelId === null ? selected?.sessionId : undefined)
     }
     const unsubscribeViews = views.source.subscribe(sync)
     const unsubscribePanel = layout.panelInfo.subscribe(sync)
+    const unsubscribeEmbedded = embedded.subscribe(sync)
     sync()
     return () => {
       unsubscribeViews()
+      unsubscribeEmbedded()
       unsubscribePanel()
       show(undefined)
     }
@@ -202,14 +211,21 @@ export function apply(ctx: ClientContext): void {
 
     const disposeTypes = [tabs.register(guideDefinition(t))]
     const disposeSeat = ctx.slots.inject('rightbar', function* () {
-      yield ctx.slots.register({
-        name: 'rightbar',
+      yield ctx.slots.registerFactory({
+        name: 'sidebar.right.browser',
+        scope: 'root',
         children: { 'rightbar.session': { kind: 'single', scope: 'session' } },
         inject: (): RightbarRootInjected => ({
-          hooks: { views: views.source },
+          hooks: { views: views.source, embedded },
           mountView: reference => views.mount(reference),
+          present: (sessionId) => {
+            const owner = { sessionId }
+            embedded.set(owner)
+            return () => { if (embedded.getSnapshot() === owner) embedded.set(null) }
+          },
         }),
       }, RightbarRoot)
+      yield ctx.slots.register({ name: 'rightbar' }, MainRightbar)
       yield ctx.slots.register({
         name: 'rightbar.session',
         locale: NS,

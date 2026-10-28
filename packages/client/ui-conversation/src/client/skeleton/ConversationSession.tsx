@@ -57,8 +57,9 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
  */
 export function ConversationSessionHeader({
   sessionId, hideChrome, useSessions, useConversationViews, useStore,
-  renderSlot, open, selectView, t,
+  renderSlot, open: defaultOpen, onOpenSession, selectView, t,
 }: ConversationSessionHeaderProps) {
+  const open = onOpenSession ?? defaultOpen
   const tabs = useConversationViews(value => value)
   const selectedId = useStore(s => s.view)
   const active = resolveActiveView(tabs, selectedId)

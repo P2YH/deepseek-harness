@@ -22,6 +22,8 @@ import { SidebarRightTabRegistry } from '../src/client/tab-registry.ts'
 import type { createSidebarRightStore } from '../src/client/stores.ts'
 import * as sidebarStores from '../src/client/stores.ts'
 import { RightbarSeat } from '../src/client/shell/SidebarRight.tsx'
+import type { RightbarRootInjected } from '../src/client/shell/RightbarRoot.tsx'
+import { MainRightbar } from '../src/client/shell/MainRightbar.tsx'
 import { RightbarRoot } from '../src/client/shell/RightbarRoot.tsx'
 import { ExpandButton } from '../src/client/shell/ExpandButton.tsx'
 import { GuideBody } from '../src/client/tabs/guide/GuideBody.tsx'
@@ -48,6 +50,11 @@ async function boot(shortcuts: Partial<Shortcuts> = {}) {
   const registered: Recorded[] = []
   const slots = {
     inject: vi.fn((_name: string, register: Parameters<SlotRegistry['inject']>[1]) => ctx.effect(register)),
+    registerFactory: vi.fn((options: Omit<Recorded, 'component'>, component: unknown) => {
+      const entry: Recorded = { ...options, component }
+      registered.push(entry)
+      return () => { registered.splice(registered.indexOf(entry), 1) }
+    }),
     register: vi.fn((options: Omit<Recorded, 'component'>, component: unknown) => {
       const entry: Recorded = { ...options, component }
       registered.push(entry)
@@ -58,6 +65,11 @@ async function boot(shortcuts: Partial<Shortcuts> = {}) {
   const locale = {
     // Copy is the dictionary's contract; the key stands in for the translation.
     bind: vi.fn(() => (key: string) => key),
+    registerFactory: vi.fn((options: Omit<Recorded, 'component'>, component: unknown) => {
+      const entry: Recorded = { ...options, component }
+      registered.push(entry)
+      return () => { registered.splice(registered.indexOf(entry), 1) }
+    }),
     register: vi.fn((ns: string, dicts: unknown) => {
       dictionaries.set(ns, dicts)
       return () => { dictionaries.delete(ns) }
@@ -131,7 +143,8 @@ describe('ui-sidebar-right apply', () => {
     // and the guide body and chip title under the guide implementation's id.
     // The guide draws no product copy of its own, so neither guide seat binds the dictionary.
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
-      ['rightbar', undefined, undefined, RightbarRoot],
+      ['sidebar.right.browser', undefined, undefined, RightbarRoot],
+      ['rightbar', undefined, undefined, MainRightbar],
       ['rightbar.session', undefined, 'sidebarRight', RightbarSeat],
       ['conversation.session.header.corner', undefined, 'sidebarRight', ExpandButton],
       ['sidebar.right.pane.tab', GUIDE_ID, undefined, GuideBody],
@@ -145,6 +158,28 @@ describe('ui-sidebar-right apply', () => {
     // Both seats read one store: the button only needs to know whether the panel is expanded.
     expect(seat('rightbar.session').store).toBeDefined()
     expect(seat('conversation.session.header.corner').store).toBe(seat('rightbar.session').store)
+  })
+
+  it('binds embedded presentation to its Session and restores main selection when released', async () => {
+    const { ctx, layout, current, seat, injectedOf } = await boot()
+    const face = injectedOf(seat('sidebar.right.browser')) as RightbarRootInjected
+    current.set({ key: SESSION })
+    layout.panelInfo.set({ activePanelId: 'office' })
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBeUndefined()
+    const embeddedId = 'embedded' as SessionId
+    const release = face.present(embeddedId)
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBe(embeddedId)
+    expect(face.hooks.views.getSnapshot().find(view => view.selected)?.sessionId).toBe(embeddedId)
+    current.set({ key: 'background' as SessionId })
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBe(embeddedId)
+    const releaseNext = face.present(SESSION)
+    release()
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBe(SESSION)
+    releaseNext()
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBeUndefined()
+    layout.panelInfo.set({ activePanelId: null })
+    expect(ctx.sidebarRight.mounted.getSnapshot()).toBe('background')
+    await ctx.fiber.dispose()
   })
 
   it('names the selected Session as on screen while the Conversation fills the main column', async () => {
@@ -324,6 +359,6 @@ describe('ui-sidebar-right apply', () => {
     expect(dictionaries.size).toBe(0)
     await ctx.plugin({ inject: [...inject], apply }).await()
     expect(ctx.sidebarRightTabs.get('guide')?.id).toBe(GUIDE_ID)
-    expect(registered).toHaveLength(5)
+    expect(registered).toHaveLength(6)
   })
 })

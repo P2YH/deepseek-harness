@@ -9,7 +9,9 @@ import css from './ConversationRoot.module.css'
  * @param props - Optional Session sources and authorized header slots.
  * @returns The persistent header with any selected Session's title and views.
  */
-export function ConversationHeader({ sessionId, useSession, useConversation, renderSlot }: ConversationHeaderProps) {
+export function ConversationHeader({
+  sessionId, useSession, useConversation, renderSlot, embedded, onOpenSession,
+}: ConversationHeaderProps) {
   const session = useSession(s => s)
   const conversation = useConversation(s => s)
   const blank = session === undefined || conversation === undefined
@@ -17,11 +19,11 @@ export function ConversationHeader({ sessionId, useSession, useConversation, ren
   return (
     <header className={clsx(css.header, blank && css.headerBlank, sessionId === undefined && css.headerSessionless)} data-window-drag>
       <div className={css.headerLeading} data-conversation-header-leading="">
-        {renderSlot('conversation.header.leading', {})}
+        {!embedded && renderSlot('conversation.header.leading', {})}
       </div>
       {sessionId === undefined
         ? <div className={css.titleRow} />
-        : renderSlot('conversation.session.header', { hideChrome: blank })}
+        : renderSlot('conversation.session.header', { hideChrome: blank, onOpenSession })}
     </header>
   )
 }

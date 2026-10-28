@@ -72,6 +72,8 @@ Every renderer-created Component receives `renderFactorySlot`, so a Factory occu
 
 The Factory does not own the Conversation store. The ordinary `conversation.session` body and `conversation.session.header` retain one shared strict-Session handle, preserving draft and View-selection identity without mounting that handle under both `session` and `session-maybe` scopes.
 
+The `conversation.embedded` Factory composes `conversation.content` with explicit host-owned Workspace navigation and an occurrence-local transcript mode. This keeps business hosts on the Slot contract without cross-plugin component imports. Transcript mode removes the composer chain, including business takeovers, rather than disabling an editable subtree; it conveys no Session permission. Hosts own retained references and hide editable instances by unmounting them because the Session input runtime owns one editor root.
+
 ### Type and runtime enforcement
 
 The type chain rejects unknown Factory names, missing or extra occurrence props, child specs that disagree with `SlotMap`, definition fields that disagree with `SlotFactoryMap`, nested store factories, unknown local names, incompatible selected Components, and overlapping ownership among input, registration, injection, and scope props.

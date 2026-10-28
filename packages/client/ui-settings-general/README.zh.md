@@ -41,6 +41,8 @@ kind: "package-reference"
 
 ### 「通用」分区
 
+客户端插件可以注入 `settingsNavigation`，调用 `open()` 打开同一设置弹窗而不切换当前主面板。该服务随 `sidebar.settings` 声明的生命周期注册和释放，并保留所选设置分区。消费者需在 `dsh.client.inject` 元数据中声明 `@deepseek-ai/dsh-client-ui-settings-general`。
+
 Web 与桌面端的通用设置底部显示当前发布版本，使用构建注入的 `DSH_CLIENT_VERSION` 元数据和当前语言。缺少版本元数据的局部构建不显示该行。
 
 代码工作工具开关控制 [ui-settings](../ui-settings/README.zh.md#use-this-package) 定义的共享偏好 `ui-settings.enabled`。Web 和桌面端均提供此开关，立即跟随已接受的变更，并在写入完成前禁用重复输入。写入失败时显示本地化的重试提示。

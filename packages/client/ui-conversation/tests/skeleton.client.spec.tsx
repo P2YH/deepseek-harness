@@ -140,6 +140,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Embedded occurrence inputs. */
+    content?: Partial<ConversationContentInputProps>
   } = {},
 ) {
   const sessionId = 'sessionId' in options ? options.sessionId : SID
@@ -204,7 +206,14 @@ function mount(
       return opts?.fallback ?? null
     }
     if (key === 'conversation.header') {
-      return <ConversationHeader {...runtimeProps} renderSlot={renderSlot as never} />
+      return (
+        <ConversationHeader
+          {...runtimeProps}
+          renderSlot={renderSlot as never}
+          renderFactorySlot={() => null}
+          useFactorySlot={() => () => null}
+        />
+      )
     }
     if (key === 'conversation.session.header') {
       return (
@@ -356,7 +365,7 @@ function mount(
     )) as ConversationContentProps['useFactorySlot']
     return (
       <FactoryViewsTestContext.Provider value={common}>
-        <ConversationContent {...({ ...common, ...runtimeProps, ...input, useFactorySlot })} />
+        <ConversationContent {...({ ...common, ...runtimeProps, ...input, ...options.content, useFactorySlot })} />
       </FactoryViewsTestContext.Provider>
     )
   }) as ConversationSlotProps['renderFactorySlot']
@@ -679,6 +688,31 @@ describe('ConversationRoot resident composer', () => {
     expect(selectWorkspace).toHaveBeenCalledWith(wid('second'))
     expect(b.view.queryByText('Selected Folder')).toBeNull()
     expect(b.view.getByText('one')).toBeTruthy()
+  })
+
+  it('embedded workspace selection uses the host callback and preserves the draft after rejection', async () => {
+    const selectMain = vi.fn(async () => {})
+    const selectLocal = vi.fn(async () => { throw new Error('local connect failed') })
+    const b = mount(sessionSnapshotOf({ blank: true }), [
+      { ...workspace('one'), sessionIds: [SID] }, workspace('second'),
+    ], selectMain, { content: { variant: 'embedded', onSelectWorkspace: selectLocal } })
+    fireEvent.click(b.view.getByRole('button', { name: '选择工作区' }))
+    const owner = b.pickerOwner() as { onPick(id: WorkspaceId): void }
+    await act(async () => { owner.onPick(wid('second')); await Promise.resolve() })
+    expect(selectLocal).toHaveBeenCalledWith(wid('second'))
+    expect(selectMain).not.toHaveBeenCalled()
+    expect(b.view.getByText('one')).toBeTruthy()
+    expect(b.store.store.getSnapshot().draft).toEqual({ text: 'ordinary draft', references: [] })
+  })
+
+  it('transcript-only occurrence keeps the view and omits the composer including takeovers', () => {
+    const b = mount(sessionSnapshotOf(), undefined, undefined, {
+      overlayTakeover: true, content: { variant: 'embedded', readOnly: true },
+    })
+    expect(b.view.getByTestId('view-chat')).toBeTruthy()
+    expect(b.view.queryByTestId('composer-takeover')).toBeNull()
+    expect(b.view.container.querySelector('[data-composer-seat]')).toBeNull()
+    expect(b.view.queryByRole('textbox')).toBeNull()
   })
 
   it('blank session keeps the interactive picker chip (workspace switchable until the first message)', () => {
