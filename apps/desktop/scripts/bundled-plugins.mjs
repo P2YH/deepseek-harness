@@ -13,11 +13,12 @@ export function resolveBundledPluginsDirectory(environment) {
   if (!directory) return undefined
   if (resolveDesktopDistributionMode(environment) !== 'intranet') throw new Error('desktop package: bundled plugins require intranet mode')
   const inventory = JSON.parse(readFileSync(join(directory, 'plugins.json'), 'utf8'))
-  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || ![2, 3].includes(inventory.plugins.length)
+  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || ![2, 3, 4].includes(inventory.plugins.length)
     || new Set(inventory.plugins.map(plugin => plugin.name)).size !== inventory.plugins.length
-    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-pet'].includes(plugin.name))
-    || ['dsh-plugin-office-agents', 'dsh-plugin-architecture-review'].some(name => !inventory.plugins.some(plugin => plugin.name === name))) {
-    throw new Error('desktop package: office and architecture review bundles are required')
+    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-pet'].includes(plugin.name))
+    || !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-architecture-review')
+    || !inventory.plugins.some(plugin => ['dsh-plugin-office-agents', 'dsh-plugin-easyview'].includes(plugin.name))) {
+    throw new Error('desktop package: architecture review and one supported document workbench bundle are required')
   }
   for (const plugin of inventory.plugins) {
     if (!statSync(join(directory, plugin.name, 'plugin.tgz')).isFile()

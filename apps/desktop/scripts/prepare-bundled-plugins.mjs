@@ -6,8 +6,8 @@ import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { resolveBundledPluginsDirectory } from './bundled-plugins.mjs'
 
-const [output, office, review, petZip] = process.argv.slice(2)
-if (!output || !office || !review) throw new Error('Usage: node prepare-bundled-plugins.mjs <new-output-directory> <office.tgz> <review.tgz> [pet-offline.zip]')
+const [output, firstArchive, secondArchive, petZip] = process.argv.slice(2)
+if (!output || !firstArchive || !secondArchive) throw new Error('Usage: node prepare-bundled-plugins.mjs <new-output-directory> <architecture-review.tgz> <easyview-or-office.tgz> [pet-offline.zip]')
 const directory = resolve(output)
 if (existsSync(directory)) throw new Error('desktop bundled plugins: output already exists')
 mkdirSync(directory, { recursive: true })
@@ -44,8 +44,16 @@ function addPlugin(name, archive) {
   plugins.push(plugin)
   return plugin
 }
-addPlugin('dsh-plugin-office-agents', office)
-addPlugin('dsh-plugin-architecture-review', review)
+function archivePackageName(archive) {
+  const manifest = execFileSync('tar.exe', ['-xOf', resolve(archive), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
+  return JSON.parse(manifest).name
+}
+const archives = new Map([[archivePackageName(firstArchive), firstArchive], [archivePackageName(secondArchive), secondArchive]])
+if (!archives.has('dsh-plugin-architecture-review')) throw new Error('Bundled plugin preparation requires dsh-plugin-architecture-review')
+const documentWorkbench = archives.has('dsh-plugin-easyview') ? 'dsh-plugin-easyview' : 'dsh-plugin-office-agents'
+if (!archives.has(documentWorkbench)) throw new Error('Bundled plugin preparation requires dsh-plugin-easyview or dsh-plugin-office-agents')
+addPlugin('dsh-plugin-architecture-review', archives.get('dsh-plugin-architecture-review'))
+addPlugin(documentWorkbench, archives.get(documentWorkbench))
 if (petZip) {
   safeEntries(petZip, false)
   const temporary = mkdtempSync(join(tmpdir(), 'dsh-pet-bundle-'))

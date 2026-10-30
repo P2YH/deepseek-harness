@@ -170,10 +170,6 @@ function mount(
     useCatalog: select => select(snapshot),
     useSessions: select => select(sessions),
     useWorkspaces: select => select(workspaces),
-    usePanelInfo: select => select({ activePanelId: null }),
-    useSessionStatus: select => select(new Map()),
-    useSessionRetainInfo: () => undefined,
-    useResource: () => { throw new Error('The task manager does not load document resources') },
     ...allowAllAccess,
     onDelete: vi.fn<TaskManagerPageProps['onDelete']>(async () => 'deleted'),
     onRetry: vi.fn(async () => {}),
@@ -614,6 +610,17 @@ it('updates original Session navigation as metadata arrives and archive state ch
 })
 
 describe('Task manager catalog', () => {
+  it('opens an embedded request once after catalog loading, and accepts a new request for the same task', () => {
+    const request = { id: at.id, nonce: 'open-1' }
+    const h = mount({ status: 'loading', records: [] }, en, { request })
+    h.update({ status: 'ready', records })
+    expect(screen.getByRole('complementary', { name: en['detail.label'] })).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en['detail.close'] }))
+    h.update({ records: [...records] })
+    expect(screen.queryByRole('complementary', { name: en['detail.label'] })).toBeNull()
+    h.view.rerender(<TaskManagerPage {...h.props} request={{ ...request, nonce: 'open-2' }} />)
+    expect(screen.getByRole('complementary', { name: en['detail.label'] })).not.toBeNull()
+  })
   it('starts a new Session instead of offering a page creation form', () => {
     const h = mount({ records: [at] })
     // The heading's compact action and the empty state's named action are the

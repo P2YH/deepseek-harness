@@ -28,6 +28,7 @@
  * per-Session source.
  */
 
+import { createElement } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -65,6 +66,19 @@ const MANAGER_NS = 'schedule.manager'
 const PANEL_ID = 'schedules' as MainPanelId
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotFactoryMap {
+    /** Official task manager embedded in another shell, with caller-owned navigation. */
+    'schedule.workbench': {
+      scope: 'root'
+      props: {
+        onCreate: () => void
+        onSession: (id: SessionId) => void
+        request?: { readonly id: ScheduleId; readonly nonce: string }
+      }
+      inject: TaskManagerInjected
+      locale: 'schedule.manager'
+    }
+  }
   interface LocaleNamespaceMap {
     /** Active Schedule catalog copy. */
     'schedule.catalog': ScheduleCatalogKey
@@ -145,6 +159,19 @@ export function apply(ctx: ClientContext): void {
     loadHistory,
     onOpenSession: openSession,
   }
+  ctx.effect(() => ctx.slots.registerFactory({
+    name: 'schedule.workbench', scope: 'root', locale: MANAGER_NS,
+    inject: () => ({
+      ...detail,
+      onNewTask: () => { ctx.uiWorkspace.startSession() },
+    }),
+  }, props => createElement(TaskManagerPage, {
+    ...props,
+    onNewTask: props.onCreate,
+    onOpenSession: (id) => {
+      if (sessionLinkState(id, ctx.sessions.list.getSnapshot(), ctx.workspaces.list.getSnapshot()) === 'available') props.onSession(id)
+    },
+  })), 'ui-schedule: embedded task manager')
   // The Sidebar persists a tab's layout record and not its navigation
   // parameters, so this page type keeps the task it last showed per Session and
   // tab id. That Session's committed tab ids bound every write, so a closed tab

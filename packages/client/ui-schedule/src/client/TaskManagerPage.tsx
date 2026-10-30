@@ -27,9 +27,10 @@ export interface TaskManagerInjected extends TaskDetailInjected {
 }
 
 /** Root-scoped task catalog props derived from the framework and injected actions. */
-export type TaskManagerPageProps = PropsRuntime<'main'>
+export type TaskManagerPageProps = Pick<PropsRuntime<'main'>, 'useSessions' | 'useWorkspaces'>
   & InjectFace<TaskManagerInjected>
   & PropsLocale<'schedule.manager'>
+  & { readonly request?: { readonly id: ScheduleId; readonly nonce: string } }
 
 type StatusFilter = 'all' | ScheduleCatalogEntry['status']
 
@@ -45,6 +46,14 @@ export function TaskManagerPage(props: TaskManagerPageProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedId, setSelectedId] = useState<ScheduleId | null>(null)
+  const openedRequest = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!props.request || props.request.nonce === openedRequest.current || status !== 'ready') return
+    openedRequest.current = props.request.nonce
+    setSearch('')
+    setStatusFilter('all')
+    setSelectedId(records.some(record => record.id === props.request?.id) ? props.request.id : null)
+  }, [props.request, records, status])
   // The rows state how long remains, so they read the shared ticking clock
   // rather than a value sampled at mount: a catalog refresh can move the target
   // this text describes.

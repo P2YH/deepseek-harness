@@ -40,7 +40,7 @@ it('offers the Hezhi default only in intranet mode and keeps it editable', async
   expect(standard.llm.listProviders()).toEqual([])
   expect(standard.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-official', model: 'deepseek-flash' })
   const intranet = await composition('intranet')
-  expect(intranet.agentDefaultModel.currentSelection()).toEqual({ provider: 'hezhi', model: 'Qwen3.6-27B' })
+  expect(intranet.agentDefaultModel.currentSelection()).toEqual({ provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP' })
   expect(intranet.llm.listProviders()).toContainEqual(expect.objectContaining({ id: 'hezhi', name: '核智' }))
   expect(await intranet.llm.listModels('hezhi')).toContainEqual(expect.objectContaining({ id: 'Qwen3.6-27B' }))
   const entry = intranet.loader.resolve('llm-pi-ai')

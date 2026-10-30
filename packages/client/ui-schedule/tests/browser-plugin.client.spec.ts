@@ -1,3 +1,4 @@
+import { isValidElement } from 'react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi, type Mock } from 'vitest'
@@ -19,7 +20,7 @@ import { ScheduleDeleteToast, type DeleteToastSource } from '../src/client/Delet
 import { SCHEDULE_TASK_ID, SCHEDULE_TASK_KIND } from '../src/client/definition.ts'
 import { ScheduleTaskTab, type ScheduleTaskBindingInjected, type ScheduleTaskCatalogInjected, type ScheduleTaskTabInjected } from '../src/client/ScheduleTaskTab.tsx'
 import { ScheduleTaskTabTitle } from '../src/client/ScheduleTaskTabTitle.tsx'
-import type { TaskManagerInjected } from '../src/client/TaskManagerPage.tsx'
+import type { TaskManagerInjected, TaskManagerPageProps } from '../src/client/TaskManagerPage.tsx'
 import { ScheduleCatalogAction } from '../src/client/ScheduleCatalogAction.tsx'
 import { SessionScheduleHover } from '../src/client/SessionScheduleHover.tsx'
 import { SessionScheduleMark } from '../src/client/SessionScheduleMark.tsx'
@@ -137,6 +138,32 @@ function declareTranscriptSeats(ctx: Context): () => void {
 }
 
 describe('ui-schedule browser half', () => {
+  it('embeds the official manager with owner navigation', async () => {
+    const ctx = await baseContext()
+    const register = vi.spyOn(ctx.slots, 'registerFactory')
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    try {
+      const registration = register.mock.calls.find(([options]) => options.name === 'schedule.workbench')
+      if (!registration) throw new Error('Missing embedded manager')
+      expect(ctx.slots.snapshot('factory:schedule.workbench')).toHaveLength(1)
+      const [, component] = registration
+      if (typeof component !== 'function') throw new Error('Missing embedded manager component')
+      const onCreate = vi.fn(), onSession = vi.fn()
+      const element = component({ onCreate, onSession } as never)
+      if (!isValidElement<TaskManagerPageProps>(element)) throw new Error('Embedded manager did not render')
+      element.props.onNewTask()
+      element.props.onOpenSession('cold-original' as SessionId)
+      expect(onCreate).toHaveBeenCalledOnce()
+      expect(onSession).toHaveBeenCalledWith('cold-original')
+      expect(ctx.uiWorkspace.startSession).not.toHaveBeenCalled()
+      expect(ctx.uiWorkspace.openSession).not.toHaveBeenCalled()
+    } finally {
+      await fiber.dispose()
+      expect(ctx.slots.snapshot('factory:schedule.workbench')).toHaveLength(0)
+      await ctx.fiber.dispose()
+    }
+  })
   it('declares only the services used by registration', () => {
     expect(inject).toEqual([
       'slots', 'locale', 'remote', 'remote.schedule', 'conversation', 'uiConversation', 'uiWorkspace', 'sessions',

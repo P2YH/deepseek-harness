@@ -16,8 +16,8 @@
 
 - id: agent-default-model
   config:
-    provider: !!js "ctx.get('distributionMode') === 'intranet' ? 'hezhi' : 'deepseek-official'"
-    model: !!js "ctx.get('distributionMode') === 'intranet' ? 'Qwen3.6-27B' : 'deepseek-flash'"
+    provider: !!js "ctx.get('distributionMode') === 'intranet' ? 'dizhi' : 'deepseek-official'"
+    model: !!js "ctx.get('distributionMode') === 'intranet' ? 'gen-studio-Qwen3.6-27B-ygNP' : 'deepseek-flash'"
 
 # Extend the existing adapter; its configurable-provider directory is a singleton.
 - id: llm-pi-ai
