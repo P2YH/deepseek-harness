@@ -4,7 +4,7 @@
 
 ## 摘要
 
-在内网 Windows 桌面版接入地质科技和核智，无需官方账号。两种服务复用现有 pi-ai 适配器。安装器携带端点配置和凭据引用，各目标机器单独保存 API Key。
+在内网 Windows 桌面版接入地质科技和核智，无需官方账号。所有服务复用现有 pi-ai 适配器。安装器携带端点配置和凭据引用，各目标机器单独保存 API Key。
 
 ## 目录
 
@@ -20,17 +20,18 @@
 
 配置中使用下表的 Base URL，不追加 `/chat/completions`；适配器会追加该后缀。保留地质科技的 `/openai/v1` 前缀和精确模型 ID。
 
-| 字段 | 地质科技 | 核智 |
-| --- | --- | --- |
-| Provider ID | `dizhi` | `hezhi` |
-| 模型 ID | `gen-studio-Qwen3.6-27B-ygNP` | `Qwen3.6-27B` |
-| Base URL | `http://10.76.22.59/openai/v1` | `http://10.139.133.3:8001/v1` |
-| 凭据引用 | `DIZHI_API_KEY` | `HEZHI_API_KEY` |
-| 输出限制字段 | `max_tokens` | `max_completion_tokens` |
-| 思考参数 | 未配置 | `chat_template_kwargs.enable_thinking` |
-| 输入声明 | 文本 | 文本、图片；视觉能力未实测 |
+| 字段 | 地质科技 | 核智 Qwen | 核智 DeepSeek V4 |
+| --- | --- | --- | --- |
+| Provider ID | `dizhi` | `hezhi` | `hezhi-dsv4` |
+| 模型 ID | `gen-studio-Qwen3.6-27B-ygNP` | `Qwen3.6-27B` | `dsv4` |
+| Base URL | `http://10.76.22.59/openai/v1` | `http://10.139.133.3:8001/v1` | `http://cori.cnnc.cn/hz/hz_model_dpsk/v1` |
+| 原始地址 | — | — | `http://10.139.133.3:8001/hz_model_dpsk/v1` |
+| 凭据引用 | `DIZHI_API_KEY` | `HEZHI_API_KEY` | `HEZHI_DSV4_API_KEY` |
+| 输出限制字段 | `max_tokens` | `max_completion_tokens` | `max_tokens` |
+| 思考参数 | 未配置 | `chat_template_kwargs.enable_thinking` | 未配置 |
+| 输入声明 | 文本 | 文本、图片；视觉能力未实测 | 文本 |
 
-两条 route 均使用 `openai-completions` 和 Bearer 认证。地质不覆盖容量，继承官方适配器默认值，目前为 262144/32768 上下文/输出 token；SDK 可根据剩余上下文缩减输出额度。核智保留 32768/8192 token 的临时部署配置。这些默认值和临时配置均不代表已验证的服务端限制。
+三条 route 均使用 `openai-completions` 和 Bearer 认证。地质不覆盖容量，继承官方适配器默认值，目前为 262144/32768 上下文/输出 token；SDK 可根据剩余上下文缩减输出额度。核智 Qwen 保留 32768/8192 token 的临时部署配置，dsv4 route 使用适配器回退容量。这些默认值和临时配置均不代表已验证的服务端限制。
 
 <a id="packaging"></a>
 
@@ -40,14 +41,14 @@
 
 当前源码组合默认核智。如需新安装默认地质科技，将 bundle patch 中 `agent-default-model` 的内网分支改为 `dizhi` 和 `gen-studio-Qwen3.6-27B-ygNP`，保留标准模式分支，并更新对应测试。已有 Profile 保存的选择仍优先。
 
-本地安装器 `0.2.0-rc.2.20261008.1` 早于这两种 provider 的接入，需按下文配置 Profile 或重新构建。常规构建不包含密钥。经授权的内网部署可按下文仅预置两个模型的密钥；不要将开发机凭据文件或整个 Harness home 打入安装器。
+本地安装器 `0.2.0-rc.2.20261008.1` 早于这些 provider 的接入，需按下文配置 Profile 或重新构建。常规构建不包含密钥。经授权的内网部署可按下文仅预置三个模型的密钥；不要将开发机凭据文件或整个 Harness home 打入安装器。
 
 ### 可选的部署密钥
 
 如需经授权的内网安装器免填写密钥，在 `apps/desktop/.env.windows` 中设置 `DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE`，指向源码目录以外的私有 JSON 文件。相对路径以 `apps/desktop` 为基准。标准模式拒绝此设置，启动环境中的同名变量不会启用它。输入仅允许以下结构，将示例值替换为部署所用的真实 Bearer 密钥：
 
 ```json
-{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key"}}
+{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key","HEZHI_DSV4_API_KEY":"deployment-hezhi-dsv4-key"}}
 ```
 
 安装器包含可提取的凭据，应在其授权范围内分发。内网桌面启动 Host 前，将缺失或为空的密钥补入 `$DSH_HOME/.env`。已有非空 home 值保持不变；Profile 的 dotenv 值、通过模型设置保存到 `.credentials.yaml` 的密钥以及继承的进程凭据优先。这也可修复已有安装，无需替换其 Profile、插件、项目或会话。未启用此选项的安装器仍需在目标机配置密钥。
@@ -60,7 +61,7 @@
 
 1. 完全退出桌面版，备份 `$DSH_HOME/profiles/desktop/cordis.patch.yml`。默认 Harness home 为当前用户的 `.dsh` 目录。
 2. 将下方 provider 合并到已有 `llm-pi-ai.config.providers`，保留其他 route 和适配器参数；没有该行才新增。不要为每个服务另装适配器：可配置 provider 目录不能重复注册。
-3. 仅在更改部署默认时替换已有 `agent-default-model` 配置。示例默认地质科技；核智使用 `hezhi` 和 `Qwen3.6-27B`。
+3. 仅在更改部署默认时替换已有 `agent-default-model` 配置。示例默认地质科技；核智 Qwen 使用 `hezhi` 和 `Qwen3.6-27B`，核智 DeepSeek V4 使用 `hezhi-dsv4` 和 `dsv4`。
 4. 启动桌面版，进入“设置 → 模型”，分别编辑 provider，通过官方凭据服务保存 API Key。密钥保存在 Harness home 的 `.credentials.yaml`，与 provider 配置分开存储。
 5. 重启桌面版，在新建会话中检查模型。已有会话保留显式选择；需要时在该会话的模型选择器中切换。
 
@@ -115,6 +116,22 @@
             reasoningEfforts:
               'off': null
               high: high
+      hezhi-dsv4:
+        displayName: 核智 DeepSeek
+        api: openai-completions
+        baseURL: http://cori.cnnc.cn/hz/hz_model_dpsk/v1
+        apiKeyEnv: HEZHI_DSV4_API_KEY
+        reasoning: 'off'
+        compat:
+          supportsStore: false
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          supportsUsageInStreaming: false
+          maxTokensField: max_tokens
+        models:
+          - id: dsv4
+            name: deepseek-v4-flash
+            input: [text]
 - id: agent-default-model
   config:
     provider: dizhi
@@ -126,7 +143,7 @@
 
 ## 验收
 
-核验目标机器路由和端口，再在设置中确认两种 provider、模型 ID 和凭据状态。TCP 端口可达不证明认证或模型能力正常。
+核验目标机器路由和端口，再在设置中确认三个 provider、模型 ID 和凭据状态。TCP 端口可达不证明认证或模型能力正常。
 
 ```powershell
 Test-NetConnection -ComputerName 10.76.22.59 -Port 80

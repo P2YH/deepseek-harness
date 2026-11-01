@@ -12,7 +12,7 @@ function setup() {
   const root = mkdtempSync(join(tmpdir(), 'dsh-key-package-'))
   roots.push(root)
   const path = join(root, 'keys.json')
-  writeFileSync(path, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'test-hezhi' } }))
+  writeFileSync(path, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'test-hezhi', HEZHI_DSV4_API_KEY: 'test-dsv4' } }))
   return { root, path, env: { DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE: path } }
 }
 
@@ -39,7 +39,7 @@ it('rejects standard-mode inclusion and invalid deployment files without disclos
   const { env, path } = setup()
   expect(() => resolveIntranetModelKeysFile({ ...env, DSH_DISTRIBUTION_MODE: 'standard' })).toThrow(/require intranet mode/u)
   for (const raw of ['{"test-secret":', JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret' } }),
-    JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret', HEZHI_API_KEY: 'test', OTHER_KEY: 'test' } })]) {
+    JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret', HEZHI_API_KEY: 'test', HEZHI_DSV4_API_KEY: 'test', OTHER_KEY: 'test' } })]) {
     writeFileSync(path, raw)
     expect(() => resolveIntranetModelKeysFile(env)).toThrow(/^desktop package: invalid intranet model deployment file$/u)
   }

@@ -12,8 +12,8 @@
   en: e98e516b9e1bd0f4
   zh: 1a2abd7d89ef78a1
 /desktop-packaging/table-of-contents:
-  en: a6203dc2e690c7e1
-  zh: 07b516549b8e3328
+  en: c53f498f42f54bfb
+  zh: f95b7767b534abd9
 /desktop-packaging/choose-a-build-path:
   en: 17c6bcdefa05a8f8
   zh: 4ee18f832276144d
@@ -39,8 +39,11 @@
   en: 62c125856aa03c26
   zh: 9fc00a43c8b1e8e2
 /desktop-packaging/directory-builds-and-preparation:
-  en: 30d58517c9c2044f
-  zh: 16d26bdc923fc4ba
+  en: 316a2483ce16990f
+  zh: 22808249007e115d
+/desktop-packaging/plugin-archives-and-cache-isolation:
+  en: 3c31502a79d5faf9
+  zh: 75e7ba93c14bc61f
 /desktop-packaging/local-official-bundles-from-a-loopback-registry:
   en: b42f103358d0dfd7
   zh: a534164ad9eb00da

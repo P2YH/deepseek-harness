@@ -4,7 +4,7 @@ import { resolveIntranetModelKeysFile } from './intranet-model-keys.mjs'
 import { resolveBundledPluginsDirectory } from './bundled-plugins.mjs'
 import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { cp, readFile } from 'node:fs/promises'
+import { cp, readFile, rm } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -210,10 +210,14 @@ export function createElectronBuilderConfig(
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
       if (bundledPlugins !== undefined) {
         const { verifyBundledPlugins } = await import('../lib/types/bundled-plugins.js')
-        // Electron Builder's walker omits .gitkeep even from extraResources. Restore omitted
-        // files from the verified deployment; retain existing bytes so corruption still fails below.
-        await cp(bundledPlugins, join(resourcesDir, 'bundled-plugins'), { recursive: true, force: false })
-        verifyBundledPlugins(join(resourcesDir, 'bundled-plugins'))
+        // Electron Builder may reuse an existing win-unpacked directory between builds. Remove the
+        // generated destination first so an older plugin package cannot survive a new archive copy.
+        const packagedPlugins = join(resourcesDir, 'bundled-plugins')
+        await rm(packagedPlugins, { recursive: true, force: true })
+        // Electron Builder's walker omits .gitkeep even from extraResources, so restore every file
+        // from the verified deployment after the normal resource copy has completed.
+        await cp(bundledPlugins, packagedPlugins, { recursive: true, force: true })
+        verifyBundledPlugins(packagedPlugins)
       }
       if (intranetKeysFile !== undefined) {
         const packagedKeys = join(resourcesDir, 'intranet-model-credentials.json')

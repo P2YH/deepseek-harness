@@ -46,6 +46,27 @@
             reasoningEfforts: { off: null, high: 'high' },
           }],
         },
+        'hezhi-dsv4': {
+          displayName: '核智 DeepSeek',
+          api: 'openai-completions',
+          // Public reverse proxy for the dsv4 deployment. The origin is
+          // http://10.139.133.3:8001/hz_model_dpsk/v1.
+          baseURL: 'http://cori.cnnc.cn/hz/hz_model_dpsk/v1',
+          apiKeyEnv: 'HEZHI_DSV4_API_KEY',
+          reasoning: 'off',
+          compat: {
+            supportsStore: false,
+            supportsDeveloperRole: false,
+            supportsReasoningEffort: false,
+            supportsUsageInStreaming: false,
+            maxTokensField: 'max_tokens',
+          },
+          models: [{
+            id: 'dsv4',
+            name: 'deepseek-v4-flash',
+            input: ['text'],
+          }],
+        },
         dizhi: {
           displayName: '地质科技',
           api: 'openai-completions',

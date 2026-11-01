@@ -48,6 +48,8 @@ dsh --profile web --no-open --port 8080
 
 内网模型目录还内置 **地质科技**（`dizhi` / `gen-studio-Qwen3.6-27B-ygNP`），使用 `http://10.76.22.59/openai/v1`、凭据引用 `DIZHI_API_KEY`，并通过 Chat Completions 发送 `max_tokens`。增加此 provider 不改变核智默认模型。仅声明文本输入；流式输出、视觉和工具调用仍须在真实服务上验证。该 route 不覆盖容量，沿用官方适配器默认值，目前为 262,144 上下文 token 和 32,768 输出 token，实际输出额度受 SDK 剩余上下文计算约束。这些回退值不代表已经验证的服务端能力。已有 Profile 覆盖配置仍优先；要继承默认值，需删除该模型原有的临时 `contextWindow: 32768` 与 `maxTokens: 8192` 字段。
 
+内网模型目录还内置 **核智 DeepSeek**（`hezhi-dsv4` / `dsv4`，显示名为 `deepseek-v4-flash`）。它使用代理地址 `http://cori.cnnc.cn/hz/hz_model_dpsk/v1`，原始地址为 `http://10.139.133.3:8001/hz_model_dpsk/v1`；Bearer 凭据引用为 `HEZHI_DSV4_API_KEY`，并通过 Chat Completions 发送 `max_tokens`。该 route 仅声明文本输入且不发送思考参数；流式输出、工具调用和模型容量仍须在真实服务上验证。
+
 ### 配置
 
 `minimal` agent preset 使用持久 Shell、`read_image` 工具和固定 persona，支持自动历史压缩以及会话空闲时的 `/compact` 命令。它复用 Host token meter，并拥有隔离的压缩后端。[压缩配置与保留策略](../../compaction/compaction-basic/README.zh.md#use-this-package) 沿用现有后端。图片读取复用 Host 文件系统和附件存储，要求模型支持图片输入；不加载文本读取、写入和编辑工具。

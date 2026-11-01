@@ -4,14 +4,14 @@ import { join } from 'node:path'
 import { parseEnv } from 'node:util'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
-const REFERENCES = ['DIZHI_API_KEY', 'HEZHI_API_KEY'] as const
+const REFERENCES = ['DIZHI_API_KEY', 'HEZHI_API_KEY', 'HEZHI_DSV4_API_KEY'] as const
 
 /**
  * Fill missing home dotenv keys from an explicitly bundled deployment file.
  * Managed credentials and inherited environment retain their existing precedence.
  * The caller selects the file only for a packaged intranet application.
  * @param home - Harness home shared by Desktop and its Host.
- * @param seedPath - Private deployment JSON containing only the two model keys.
+ * @param seedPath - Private deployment JSON containing only the three model keys.
  * @returns After the locked, atomic dotenv write; repeated calls preserve existing values.
  */
 export async function seedIntranetModelCredentials(home: string, seedPath: string): Promise<void> {

@@ -4,7 +4,7 @@ English | [中文](intranet-model-packaging.zh.md)
 
 ## Summary
 
-Configure Dizhi Technology and Hezhi on an intranet Windows Desktop installation without an official account. Both services use the existing pi-ai adapter. The installer carries endpoint configuration and credential references; each target machine stores its own API keys.
+Configure Dizhi Technology and Hezhi on an intranet Windows Desktop installation without an official account. All services use the existing pi-ai adapter. The installer carries endpoint configuration and credential references; each target machine stores its own API keys.
 
 ## Table of Contents
 
@@ -20,17 +20,18 @@ Configure Dizhi Technology and Hezhi on an intranet Windows Desktop installation
 
 Use the Base URL below, without appending `/chat/completions` in configuration. The adapter adds that suffix. Preserve the Dizhi `/openai/v1` prefix and the exact model ID.
 
-| Field | Dizhi Technology | Hezhi |
-| --- | --- | --- |
-| Provider ID | `dizhi` | `hezhi` |
-| Model ID | `gen-studio-Qwen3.6-27B-ygNP` | `Qwen3.6-27B` |
-| Base URL | `http://10.76.22.59/openai/v1` | `http://10.139.133.3:8001/v1` |
-| Credential reference | `DIZHI_API_KEY` | `HEZHI_API_KEY` |
-| Output-limit field | `max_tokens` | `max_completion_tokens` |
-| Thinking parameter | Not configured | `chat_template_kwargs.enable_thinking` |
-| Declared input | Text | Text and images; vision is not live-verified |
+| Field | Dizhi Technology | Hezhi Qwen | Hezhi DeepSeek V4 |
+| --- | --- | --- | --- |
+| Provider ID | `dizhi` | `hezhi` | `hezhi-dsv4` |
+| Model ID | `gen-studio-Qwen3.6-27B-ygNP` | `Qwen3.6-27B` | `dsv4` |
+| Base URL | `http://10.76.22.59/openai/v1` | `http://10.139.133.3:8001/v1` | `http://cori.cnnc.cn/hz/hz_model_dpsk/v1` |
+| Origin URL | — | — | `http://10.139.133.3:8001/hz_model_dpsk/v1` |
+| Credential reference | `DIZHI_API_KEY` | `HEZHI_API_KEY` | `HEZHI_DSV4_API_KEY` |
+| Output-limit field | `max_tokens` | `max_completion_tokens` | `max_tokens` |
+| Thinking parameter | Not configured | `chat_template_kwargs.enable_thinking` | Not configured |
+| Declared input | Text | Text and images; vision is not live-verified | Text |
 
-Both routes use `openai-completions` and Bearer authentication. Dizhi omits capacity overrides and inherits the official adapter defaults, currently 262144/32768 context/output tokens; the SDK may reduce the output allowance to fit the remaining context. Hezhi retains provisional deployment settings of 32768/8192 tokens. Neither these defaults nor the provisional settings establish server limits.
+All three routes use `openai-completions` and Bearer authentication. Dizhi omits capacity overrides and inherits the official adapter defaults, currently 262144/32768 context/output tokens; the SDK may reduce the output allowance to fit the remaining context. Hezhi Qwen retains provisional deployment settings of 32768/8192 tokens. The dsv4 route uses the adapter fallback capacities. Neither these defaults nor the provisional settings establish server limits.
 
 <a id="packaging"></a>
 
@@ -40,14 +41,14 @@ Follow the [Desktop packaging procedure](../../apps/desktop/README.md#release-ve
 
 The source composition currently defaults to Hezhi. To make new installations default to Dizhi, update the intranet branches of `agent-default-model` in the bundle patch to `dizhi` and `gen-studio-Qwen3.6-27B-ygNP`, retain the standard-mode branches, and update the owning tests. An existing Profile's saved selection still takes precedence.
 
-The local installer `0.2.0-rc.2.20261008.1` predates these provider additions; configure its Profile as below or rebuild it. Normal builds carry no keys. A private intranet deployment may explicitly provision just the two model keys as described below; never copy a developer credentials file or an entire Harness home into an installer.
+The local installer `0.2.0-rc.2.20261008.1` predates these provider additions; configure its Profile as below or rebuild it. Normal builds carry no keys. A private intranet deployment may explicitly provision just the three model keys as described below; never copy a developer credentials file or an entire Harness home into an installer.
 
 ### Optional deployment keys
 
 For an authorized internal installer that must work without entering keys, set `DSH_DESKTOP_INTRANET_MODEL_KEYS_FILE` in `apps/desktop/.env.windows` to a private JSON file outside the source tree. Relative paths resolve against `apps/desktop`. Standard-mode builds reject this setting; ambient environment values cannot enable it. The input must contain only this structure, with the deployment's real Bearer keys in place of the example values:
 
 ```json
-{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key"}}
+{"version":1,"refs":{"DIZHI_API_KEY":"deployment-dizhi-key","HEZHI_API_KEY":"deployment-hezhi-key","HEZHI_DSV4_API_KEY":"deployment-hezhi-dsv4-key"}}
 ```
 
 The installer contains these extractable credentials and must be distributed within their authorized scope. On startup, the packaged intranet Desktop fills absent or empty entries in `$DSH_HOME/.env` before starting the Host. Existing nonempty home values remain unchanged; Profile dotenv values, keys saved through Models in `.credentials.yaml` and inherited process credentials take precedence. This also repairs an existing installation without replacing its Profile, plugins, projects or sessions. Installers without this opt-in still require target-machine keys.
@@ -60,7 +61,7 @@ The target needs a compatible Desktop runtime and network access to the selected
 
 1. Fully quit Desktop and back up `$DSH_HOME/profiles/desktop/cordis.patch.yml`. The default Harness home is the current user's `.dsh` directory.
 2. Merge the providers below into the existing `llm-pi-ai.config.providers`. Preserve other routes and adapter settings; add the row only if absent. Do not mount a separate adapter per service: its configurable-provider directory cannot register twice.
-3. Replace the existing `agent-default-model` configuration only when changing the deployment default. The example selects Dizhi. For Hezhi, use `hezhi` and `Qwen3.6-27B`.
+3. Replace the existing `agent-default-model` configuration only when changing the deployment default. The example selects Dizhi. For Hezhi Qwen, use `hezhi` and `Qwen3.6-27B`; for Hezhi DeepSeek V4, use `hezhi-dsv4` and `dsv4`.
 4. Start Desktop, open Settings → Models, edit each provider, and save its API key through the official credentials service. Keys are stored in the Harness home's `.credentials.yaml`, separately from provider configuration.
 5. Restart Desktop and check the model in a new conversation. Existing conversations retain their explicit selection; change it in that conversation's model selector when needed.
 
@@ -115,6 +116,22 @@ Merge this key-free example into the target Profile:
             reasoningEfforts:
               'off': null
               high: high
+      hezhi-dsv4:
+        displayName: 核智 DeepSeek
+        api: openai-completions
+        baseURL: http://cori.cnnc.cn/hz/hz_model_dpsk/v1
+        apiKeyEnv: HEZHI_DSV4_API_KEY
+        reasoning: 'off'
+        compat:
+          supportsStore: false
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          supportsUsageInStreaming: false
+          maxTokensField: max_tokens
+        models:
+          - id: dsv4
+            name: deepseek-v4-flash
+            input: [text]
 - id: agent-default-model
   config:
     provider: dizhi
@@ -126,7 +143,7 @@ Merge this key-free example into the target Profile:
 
 ## Verification
 
-Verify target-machine routing and ports, then confirm both provider/model IDs and credential status in Settings. A reachable TCP port does not prove authentication or model support.
+Verify target-machine routing and ports, then confirm all three provider/model IDs and credential status in Settings. A reachable TCP port does not prove authentication or model support.
 
 ```powershell
 Test-NetConnection -ComputerName 10.76.22.59 -Port 80
