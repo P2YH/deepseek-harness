@@ -6,8 +6,13 @@ import { join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { resolveBundledPluginsDirectory } from './bundled-plugins.mjs'
 
-const [output, firstArchive, secondArchive, petZip] = process.argv.slice(2)
-if (!output || !firstArchive || !secondArchive) throw new Error('Usage: node prepare-bundled-plugins.mjs <new-output-directory> <architecture-review.tgz> <easyview-or-office.tgz> [pet-offline.zip]')
+const [output, ...inputs] = process.argv.slice(2)
+if (!output || inputs.length < 2) throw new Error('Usage: node prepare-bundled-plugins.mjs <new-output-directory> <plugin.tgz> <plugin.tgz> [plugin.tgz ...] [pet-offline.zip]')
+const petInputs = inputs.filter(input => /\.zip$/iu.test(input))
+if (petInputs.length > 1) throw new Error('Bundled plugin preparation accepts at most one pet offline ZIP')
+const petZip = petInputs[0]
+const archiveInputs = inputs.filter(input => !petInputs.includes(input))
+if (archiveInputs.length < 2) throw new Error('Bundled plugin preparation requires at least two plugin archives')
 const directory = resolve(output)
 if (existsSync(directory)) throw new Error('desktop bundled plugins: output already exists')
 mkdirSync(directory, { recursive: true })
@@ -48,12 +53,21 @@ function archivePackageName(archive) {
   const manifest = execFileSync('tar.exe', ['-xOf', resolve(archive), 'package/package.json'], { encoding: 'utf8', windowsHide: true })
   return JSON.parse(manifest).name
 }
-const archives = new Map([[archivePackageName(firstArchive), firstArchive], [archivePackageName(secondArchive), secondArchive]])
+const archives = new Map()
+for (const archive of archiveInputs) {
+  const name = archivePackageName(archive)
+  if (archives.has(name)) throw new Error(`Duplicate bundled plugin archive: ${name}`)
+  archives.set(name, archive)
+}
 if (!archives.has('dsh-plugin-architecture-review')) throw new Error('Bundled plugin preparation requires dsh-plugin-architecture-review')
 const documentWorkbench = archives.has('dsh-plugin-easyview') ? 'dsh-plugin-easyview' : 'dsh-plugin-office-agents'
 if (!archives.has(documentWorkbench)) throw new Error('Bundled plugin preparation requires dsh-plugin-easyview or dsh-plugin-office-agents')
+if (documentWorkbench === 'dsh-plugin-office-agents' && !archives.has('dsh-plugin-tasks')) {
+  throw new Error('Bundled plugin preparation requires dsh-plugin-tasks when dsh-plugin-office-agents is bundled')
+}
 addPlugin('dsh-plugin-architecture-review', archives.get('dsh-plugin-architecture-review'))
 addPlugin(documentWorkbench, archives.get(documentWorkbench))
+if (archives.has('dsh-plugin-tasks')) addPlugin('dsh-plugin-tasks', archives.get('dsh-plugin-tasks'))
 if (petZip) {
   safeEntries(petZip, false)
   const temporary = mkdtempSync(join(tmpdir(), 'dsh-pet-bundle-'))

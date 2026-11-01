@@ -200,6 +200,8 @@ interface DesktopPackageInvocation {
   readonly unsigned: boolean
   readonly skipNotarization: boolean
   readonly check: boolean
+  /** Explicit offline plugin directory for a composed installer build. */
+  readonly bundledPluginsDirectory: string | undefined
   /** Build identifier to publish under, when this build does not publish the product version. */
   readonly requestedBuildVersion: string | undefined
 }
@@ -234,6 +236,7 @@ export function parseDesktopPackageInvocation(
       'skip-notarization': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       'build-version': { type: 'string' },
+      'bundled-plugins-dir': { type: 'string' },
     },
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
@@ -246,6 +249,10 @@ export function parseDesktopPackageInvocation(
   if (values['build-version'] !== undefined && (requestedBuildVersion === undefined || requestedBuildVersion === '')) {
     throw new Error('desktop package: --build-version requires a value')
   }
+  const bundledPluginsDirectory = values['bundled-plugins-dir']?.trim()
+  if (values['bundled-plugins-dir'] !== undefined && (bundledPluginsDirectory === undefined || bundledPluginsDirectory === '')) {
+    throw new Error('desktop package: --bundled-plugins-dir requires a value')
+  }
   return {
     target: resolveDesktopPackageTarget(name, hostPlatform, hostArch),
     directory: values.dir,
@@ -253,6 +260,7 @@ export function parseDesktopPackageInvocation(
     unsigned: values.unsigned,
     skipNotarization: values['skip-notarization'],
     check: values.check,
+    bundledPluginsDirectory,
     requestedBuildVersion,
   }
 }
@@ -349,6 +357,9 @@ async function main(): Promise<void> {
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
+  if (invocation.bundledPluginsDirectory !== undefined) {
+    environment.DSH_DESKTOP_BUNDLED_PLUGINS_DIR = resolve(invocation.bundledPluginsDirectory)
+  }
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.

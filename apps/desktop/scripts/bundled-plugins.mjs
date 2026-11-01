@@ -15,10 +15,12 @@ export function resolveBundledPluginsDirectory(environment) {
   const inventory = JSON.parse(readFileSync(join(directory, 'plugins.json'), 'utf8'))
   if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || ![2, 3, 4].includes(inventory.plugins.length)
     || new Set(inventory.plugins.map(plugin => plugin.name)).size !== inventory.plugins.length
-    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-pet'].includes(plugin.name))
+    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-plugin-tasks', 'dsh-pet'].includes(plugin.name))
     || !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-architecture-review')
-    || !inventory.plugins.some(plugin => ['dsh-plugin-office-agents', 'dsh-plugin-easyview'].includes(plugin.name))) {
-    throw new Error('desktop package: architecture review and one supported document workbench bundle are required')
+    || !inventory.plugins.some(plugin => ['dsh-plugin-office-agents', 'dsh-plugin-easyview'].includes(plugin.name))
+    || (inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-office-agents')
+      && !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-tasks'))) {
+    throw new Error('desktop package: architecture review, a supported document workbench, and tasks when Office Agents is bundled are required')
   }
   for (const plugin of inventory.plugins) {
     if (!statSync(join(directory, plugin.name, 'plugin.tgz')).isFile()
