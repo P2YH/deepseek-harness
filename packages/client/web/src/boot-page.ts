@@ -31,6 +31,9 @@ export class BootPage {
    * @param container - Application mount point.
    */
   constructor(container: HTMLElement) {
+    // The shipped index contains a tiny inline splash so the first document
+    // paint is useful before the client bundle and its CSS execute.
+    container.querySelector('[data-dsh-boot-static]')?.remove()
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
     this.card = div(css.card)

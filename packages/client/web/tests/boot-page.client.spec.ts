@@ -18,6 +18,15 @@ describe('BootPage', () => {
     expect(el.textContent).toContain('Loading plugins…')
   })
 
+  it('replaces the dependency-free static first frame', () => {
+    const el = document.createElement('div')
+    el.innerHTML = '<div data-dsh-boot-static>static first frame</div>'
+    document.body.append(el)
+    new BootPage(el)
+    expect(el.textContent).not.toContain('static first frame')
+    expect(el.querySelector('[data-dsh-boot]')).not.toBeNull()
+  })
+
   it('keeps loading while entries are active or loading', () => {
     const { el, page } = mount()
     page.setTotal(2)
