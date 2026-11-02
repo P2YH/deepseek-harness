@@ -591,6 +591,10 @@ async function main(): Promise<void> {
   const reconcileBackend = (): Promise<void> => {
     startup ??= (async () => {
       await navigateMain(applicationUrl)
+      // Plugin provisioning and Host startup can take several seconds on a first
+      // install. The renderer has its own boot wait state, so expose it immediately
+      // instead of leaving the application apparently unresponsive.
+      if (mainWindow !== undefined && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.showInactive()
       await backend.start(async () => {
         await Promise.all([manager.applyRelease(), prepareHostEnvironment()])
       })
@@ -1146,6 +1150,8 @@ async function main(): Promise<void> {
     const window = mainWindow ?? createMainWindow()
     await navigateMain(applicationUrl)
     if (isQuitting() || recovery.active || window.isDestroyed()) return
+    // Startup reveals the loading page without stealing focus before Host/plugin
+    // preparation completes. Activate it once the workspace is ready.
     if (activate) window.show()
     else window.showInactive()
     enteredWorkspace = true

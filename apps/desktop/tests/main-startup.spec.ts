@@ -90,8 +90,9 @@ const harness = await vi.hoisted(async () => {
       }),
     })
     readonly shown = deferred()
-    readonly show = vi.fn(() => { this.shown.resolve() })
-    readonly hide = vi.fn()
+    readonly show = vi.fn(() => { this.visible = true; this.shown.resolve() })
+    readonly showInactive = vi.fn(() => { this.visible = true })
+    readonly hide = vi.fn(() => { this.visible = false })
     readonly focus = vi.fn()
     readonly moveTop = vi.fn()
     readonly setAlwaysOnTop = vi.fn()
@@ -111,7 +112,7 @@ const harness = await vi.hoisted(async () => {
     readonly setFullScreen = vi.fn((flag: boolean) => { this.fullscreen = flag; this.emit(flag ? 'enter-full-screen' : 'leave-full-screen') })
     minimized = false
     isMinimized() { return this.minimized }
-    visible = true
+    visible = false
     isVisible() { return this.visible }
     isFocused() { return true }
     async loadURL(url: string) {
@@ -450,6 +451,25 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('reveals the loading page while Host and plugin preparation are pending', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+
+    const window = harness.windows[0]!
+    expect(window.showInactive).toHaveBeenCalledOnce()
+    expect(window.visible).toBe(true)
+
+    // The slow preparation gate is still held, so the renderer is visible before
+    // the child is even spawned.
+    expect(harness.hosts).toHaveLength(0)
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    expect(window.show).not.toHaveBeenCalled()
+    harness.hosts[0]!.ready.resolve()
+    await window.shown.promise
+    expect(window.show).toHaveBeenCalledOnce()
+  })
+
   it.each([true, false])('opens an intranet workspace without accounts, keys, policy or update requests (packaged=%s)', async (packaged) => {
     harness.app.isPackaged = packaged
     harness.embeddedMode = packaged ? 'intranet' : 'standard'

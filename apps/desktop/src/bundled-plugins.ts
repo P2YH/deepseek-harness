@@ -104,11 +104,12 @@ function seedPetElectron(home: string, directory: string, plugin: BundledPlugin)
   const destination = join(home, 'electron')
   if (pathExists(destination)) throw new Error('desktop bundled plugins: existing pet Electron runtime is incomplete')
   const source = join(directory, plugin.name, 'electron')
-  verifyElectron(source, plugin.electronFiles)
   mkdirSync(home, { recursive: true })
   const temporary = `${destination}.${randomUUID()}.tmp`
   try {
     cpSync(source, temporary, { recursive: true })
+    // Verify the copied tree. This also detects a source change during the copy,
+    // while avoiding a second full hash pass over the packaged runtime first.
     verifyElectron(temporary, plugin.electronFiles)
     renameSync(temporary, destination)
   } finally {
@@ -169,15 +170,14 @@ export function seedBundledPlugins(profile: string, directory: string, home: str
     if (!existing && pathExists(destination) && !projected) {
       throw new Error(`desktop bundled plugins: undeclared package already exists: ${plugin.name}`)
     }
-    verifyPlugin(join(directory, plugin.name), plugin)
-    verifyElectron(join(directory, plugin.name, 'electron'), plugin.electronFiles ?? [])
     plans.push({ plugin, owned, destination, existing, projected, next: `${destination}.${randomUUID()}.tmp`, installed: false })
     dependencies[plugin.name] = selected
     if (!existing && !bundles.includes(plugin.name)) bundles.push(plugin.name)
   }
   const pet = plugins.find(plugin => plugin.name === 'dsh-pet')
   if (pet !== undefined && Object.hasOwn(dependencies, pet.name)) seedPetElectron(home, directory, pet)
-  // All release resources are verified before changing any installed module.
+  // The staged copy is verified before it is published, so a source mutation
+  // during copying is rejected without changing the installed projection.
   for (const plan of plans) {
     if (!existsSync(plan.owned)) {
       mkdirSync(join(profile, '.desktop-bundles'), { recursive: true })
