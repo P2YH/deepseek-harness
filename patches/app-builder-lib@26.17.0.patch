@@ -25,3 +25,16 @@ index a637bab2668ef88e7382dd4aa5db62b74fdde898..ebcafac58971bdd7c69b78ceddcd401a
            ],
            "type": "string"
          },
+diff --git a/out/targets/nsis/nsisUtil.js b/out/targets/nsis/nsisUtil.js
+--- a/out/targets/nsis/nsisUtil.js
++++ b/out/targets/nsis/nsisUtil.js
+@@ -107,7 +107,8 @@ class CopyElevateHelper {
+         // binary lives in tempDirManager, which is cleaned up only after the build finishes.
+         if (!this.stagedUnpackedCopies.has(appOutDir)) {
+             this.stagedUnpackedCopies.add(appOutDir);
+-            target.packager.addBuildFinalizeTask(() => (0, builder_util_1.copyFile)(stagedElevate, path.join(appOutDir, "resources", "elevate.exe"), false));
++            const elevateBytes = await fs.readFile(stagedElevate);
++            target.packager.addBuildFinalizeTask(() => fs.writeFile(path.join(appOutDir, "resources", "elevate.exe"), elevateBytes));
+         }
+     }
+ }

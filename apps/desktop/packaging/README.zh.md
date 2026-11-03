@@ -213,7 +213,7 @@ pnpm run prepare:desktop
 
 ## 插件归档与缓存隔离
 
-小铀助手的 Windows x64 组合入口会依次重建 Office Agents 和架构评审离线归档、创建本轮内置插件目录、重新构建 Desktop 运行时，再生成包含品牌启动页和安装器页面的未签名安装包。需要 Windows x64、Node 24、已安装的各仓库依赖、Desktop 的打包配置和 Windows C++ 构建工具；源码仓库路径和归档命令固定在 Office Agents 的 `scripts/xiaoyou-packaging.json` 中，可通过 `--config <recipe.json>` 选择本机配置，配置中的插件路径相对于配置文件解析。
+小铀助手的 Windows x64 组合入口会依次重建 Office Agents（含 PPT 专家）、架构评审、待办清单和 EasyView 文档工作台归档，将四项完整放入本轮内置插件目录，重新构建 Desktop 运行时，再生成包含品牌启动页和安装器页面的未签名安装包。EasyView 使用包含运行依赖的 Windows 开发候选包，独立发行验收仍待完成。需要 Windows x64、Node 24、已安装的各仓库依赖、Desktop 的打包配置和 Windows C++ 构建工具；源码仓库路径和归档命令固定在 Office Agents 的 `scripts/xiaoyou-packaging.json` 中，可通过 `--config <recipe.json>` 选择本机配置，配置中的插件路径相对于配置文件解析。
 
 确认完整版本号后，从 Office Agents 仓库运行：
 
@@ -270,6 +270,8 @@ Windows 安装器在启动时和选定目标目录后检查应用是否正在运
 解压失败时，安装器会把 7-Zip 的结果和完整错误输出写入更新缓存目录 `%LOCALAPPDATA%\<按包名派生>-updater\installer-logs\extract-failure-<时间戳>.log`（当前为 `@deepseek-aidsh-desktop-updater`），并在弹窗中显示首条错误行和 **复制错误信息** 按钮；静默安装只写入报告。未签名的 Windows 构建（`DSH_DESKTOP_UNSIGNED=1`）会将安装包命名为 `deepseek-harness-<版本>-win-x64-unsigned.exe`，以免被误当作发布产物。
 
 Windows 打包将 7-Zip 过滤器固定为 `BCJ`，以兼容内置的 NSIS 解码器。这样可以保留 x64 安装包中由依赖携带的 ARM64 二进制文件；自动 ARM64 过滤会生成该解码器无法解压的条目。
+
+锁定的 electron-builder 补丁保留暂存 `elevate.exe` 的文件字节，用于最后复制到 `win-unpacked`；该复制不依赖安装器生成后临时路径仍然存在。
 
 NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
 

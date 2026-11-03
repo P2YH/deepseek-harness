@@ -13,9 +13,10 @@ export function resolveBundledPluginsDirectory(environment) {
   if (!directory) return undefined
   if (resolveDesktopDistributionMode(environment) !== 'intranet') throw new Error('desktop package: bundled plugins require intranet mode')
   const inventory = JSON.parse(readFileSync(join(directory, 'plugins.json'), 'utf8'))
-  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || ![2, 3, 4].includes(inventory.plugins.length)
+  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || inventory.plugins.length < 2 || inventory.plugins.length > 9
     || new Set(inventory.plugins.map(plugin => plugin.name)).size !== inventory.plugins.length
-    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-plugin-tasks', 'dsh-pet'].includes(plugin.name))
+    || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-plugin-tasks',
+      'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor', 'dsh-pet'].includes(plugin.name))
     || !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-architecture-review')
     || !inventory.plugins.some(plugin => ['dsh-plugin-office-agents', 'dsh-plugin-easyview'].includes(plugin.name))
     || (inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-office-agents')

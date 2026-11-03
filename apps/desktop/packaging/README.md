@@ -213,7 +213,7 @@ This diagnostic command is an alternative stopping point, not the first half of 
 
 ## Plugin archives and cache isolation
 
-The XiaoYou Windows x64 entry rebuilds the Office Agents and architecture review offline archives, creates a new bundled-plugin directory, rebuilds the Desktop runtime, and generates an unsigned installer with branded startup and installer pages. It requires Windows x64, Node 24, installed dependencies in each repository, Desktop packaging configuration, and Windows C++ build tools; source paths and archive commands live in Office Agents' `scripts/xiaoyou-packaging.json`, with `--config <recipe.json>` selecting a machine-specific recipe and plugin paths resolved relative to that file.
+The XiaoYou Windows x64 entry rebuilds Office Agents (including the PPT expert), architecture review, Tasks, and the EasyView document workbench archives, includes all four in a new bundled-plugin directory, rebuilds the Desktop runtime, and generates an unsigned installer with branded startup and installer pages. EasyView uses its self-contained Windows development candidate; independent release acceptance remains pending. It requires Windows x64, Node 24, installed dependencies in each repository, Desktop packaging configuration, and Windows C++ build tools; source paths and archive commands live in Office Agents' `scripts/xiaoyou-packaging.json`, with `--config <recipe.json>` selecting a machine-specific recipe and plugin paths resolved relative to that file.
 
 After confirming the complete build version, run from the Office Agents repository:
 
@@ -270,6 +270,8 @@ Directory renames, empty-destination removal, and restoration retry Windows erro
 When extraction fails, the installer writes a report with the 7-Zip result and its complete error output to the updater cache directory as `%LOCALAPPDATA%\<package-derived name>-updater\installer-logs\extract-failure-<timestamp>.log` (currently `@deepseek-aidsh-desktop-updater`) and shows the first error line with a **Copy error details** button; silent installs write only the report. Unsigned Windows builds (`DSH_DESKTOP_UNSIGNED=1`) name their installer `deepseek-harness-<version>-win-x64-unsigned.exe` so they cannot be mistaken for release artifacts.
 
 Windows packaging fixes the 7-Zip filter to `BCJ` for compatibility with the bundled NSIS decoder. This preserves ARM64 binaries carried by dependencies in x64 installers; automatic ARM64 filtering produces entries that this decoder cannot extract.
+
+The pinned electron-builder patch retains the staged `elevate.exe` bytes for the final copy into `win-unpacked`; that copy does not depend on the temporary staging path remaining available after installer creation.
 
 NSIS removes its temporary extraction tree during installation, before the completion page or an automatic launch. The installed production packages remain ordinary files; startup does not extract them again. Installation still writes the complete application tree.
 

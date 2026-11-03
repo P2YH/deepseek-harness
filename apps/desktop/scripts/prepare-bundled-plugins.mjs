@@ -60,14 +60,16 @@ for (const archive of archiveInputs) {
   archives.set(name, archive)
 }
 if (!archives.has('dsh-plugin-architecture-review')) throw new Error('Bundled plugin preparation requires dsh-plugin-architecture-review')
-const documentWorkbench = archives.has('dsh-plugin-easyview') ? 'dsh-plugin-easyview' : 'dsh-plugin-office-agents'
-if (!archives.has(documentWorkbench)) throw new Error('Bundled plugin preparation requires dsh-plugin-easyview or dsh-plugin-office-agents')
-if (documentWorkbench === 'dsh-plugin-office-agents' && !archives.has('dsh-plugin-tasks')) {
+const supported = ['dsh-plugin-architecture-review', 'dsh-plugin-office-agents', 'dsh-plugin-easyview', 'dsh-plugin-tasks',
+  'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor']
+if ([...archives.keys()].some(name => !supported.includes(name))) throw new Error('Unsupported bundled plugin archive')
+if (!archives.has('dsh-plugin-easyview') && !archives.has('dsh-plugin-office-agents')) throw new Error('Bundled plugin preparation requires dsh-plugin-easyview or dsh-plugin-office-agents')
+if (archives.has('dsh-plugin-office-agents') && !archives.has('dsh-plugin-tasks')) {
   throw new Error('Bundled plugin preparation requires dsh-plugin-tasks when dsh-plugin-office-agents is bundled')
 }
-addPlugin('dsh-plugin-architecture-review', archives.get('dsh-plugin-architecture-review'))
-addPlugin(documentWorkbench, archives.get(documentWorkbench))
-if (archives.has('dsh-plugin-tasks')) addPlugin('dsh-plugin-tasks', archives.get('dsh-plugin-tasks'))
+for (const name of supported) {
+  if (archives.has(name)) addPlugin(name, archives.get(name))
+}
 if (petZip) {
   safeEntries(petZip, false)
   const temporary = mkdtempSync(join(tmpdir(), 'dsh-pet-bundle-'))
