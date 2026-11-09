@@ -6,7 +6,7 @@
 
 本地下载和强更弹窗证据与生产后端联调、视觉验收、已安装应用升级分开记录。运行 [Desktop README](../README.zh.md) 中的命令可生成新的隔离报告。
 
-已安装应用验收可显式启用 `DSH_DESKTOP_UPDATE_JOURNAL_DIR`，使用安装目录树之外、两个版本共同保留的绝对路径。每个主进程将已安装版本、状态转换和人工操作标记刷新到单独的 JSONL 文件。原始诊断和请求数据被排除；存储错误会向上传播。[日志决策](../../../.agents/notes/implemented/testing/2026-09-14-desktop-installed-update-journal.zh.md)定义证据的局限。单元与主入口测试覆盖该日志；签名安装版升级仍未验证。
+已安装应用验收可显式启用 `DSH_DESKTOP_UPDATE_JOURNAL_DIR`，使用安装目录树之外、两个版本共同保留的绝对路径。每个主进程将已安装版本、状态转换和人工操作标记刷新到单独的 JSONL 文件。原始诊断和请求数据被排除；存储错误会向上传播，但退出记录失败仅报告错误，不阻止退出。[日志决策](../../../.agents/notes/implemented/testing/2026-09-14-desktop-installed-update-journal.zh.md)定义证据的局限。单元与主入口测试覆盖该日志；签名安装版升级仍未验证。
 
 ## 目录
 
@@ -39,6 +39,10 @@ Host、客户端与 Desktop 产物构建完成后，在 Windows 仓库根目录�
 <a id="verification-evidence"></a>
 
 ## 验证证据
+
+构建 Desktop 后，在仓库根目录运行 `node --import tsx apps/desktop/scripts/test-window-quit.ts`，可验证主文档和 iframe 中真实 Chromium 的卸载拦截、取消、确认框失败、确认丢弃、无更改文档关闭，以及退出后第二个进程取得同一 profile 的单实例锁。默认使用缓存的 Windows Electron 运行时；`--electron <path>` 可指定其他已准备的运行时。原生丢弃确认的答案使用替代实现；主入口测试覆盖本地化弹框、Host 和托盘保留，以及清理顺序。
+
+Windows 上，同一原生冒烟测试还检查真实 Electron Node 模式下的 Host 归属：普通退出和强退均终止脱离父进程的内部 worker，保留外部应用；强制清理后台进程时拒绝安装更新。主入口回归测试将启动准备及 Platform 清理保持到五秒退出时限之后，注入日志写入失败与认证清理拒绝，并验证重复退出及取消退出。
 
 本地命令构建 Desktop，并在 Electron 44 中运行真实 HTTP updater、策略客户端、沙箱预加载和强更页面。它记录每个场景，并把报告保存在 `.desktop-build/qualification/local-updater-*`。安装器调用、外部浏览器和剪贴板均替换为观测记录；下载字节不是可执行安装器。
 

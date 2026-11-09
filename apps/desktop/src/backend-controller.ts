@@ -20,10 +20,13 @@ export interface DesktopBackendHost {
   start(): Promise<unknown>
   /** @returns Completion of child exit. */
   stop(): Promise<void>
+  /** Terminate owned processes immediately after the ordinary quit deadline. */
+  forceStop(): void
 }
 
 interface Attempt<Host> {
   cancelled: boolean
+  readonly abort: AbortController
   failure?: Error
   host?: Host
   cleanup?: Promise<void>
@@ -54,16 +57,17 @@ export class DesktopBackendController<Host extends DesktopBackendHost> {
 
   /**
    * Prepare the profile and start one child; concurrent callers share the attempt.
-   * @param prepare - Profile preparation that must finish before spawning.
+   * @param prepare - Profile preparation that must finish before spawning; stopping aborts its signal.
    * @returns Completion of startup, rejecting on preparation, startup, or cleanup failure.
    */
-  start(prepare: () => Promise<void>): Promise<void> {
+  start(prepare: (signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.closed) return Promise.reject(new Error('desktop backend is closed'))
     if (this.stopping !== undefined) return Promise.reject(new Error('desktop backend is stopping'))
     if (this.pending !== undefined) return this.pending
     if (this.current.phase === 'ready') return Promise.resolve()
     const previous = this.attempt
-    const attempt: Attempt<Host> = { cancelled: false, ...(previous?.cleanup === undefined ? {} : { cleanup: previous.cleanup }) }
+    const attempt: Attempt<Host> = { cancelled: false, abort: new AbortController(),
+      ...(previous?.cleanup === undefined ? {} : { cleanup: previous.cleanup }) }
     this.attempt = attempt
     this.update({ phase: 'starting' })
     const pending = Promise.resolve().then(async () => {
@@ -71,7 +75,7 @@ export class DesktopBackendController<Host extends DesktopBackendHost> {
         await previous?.cleanup
         delete attempt.cleanup
         if (attempt.cancelled) return
-        await prepare()
+        await prepare(attempt.abort.signal)
         // stop() can cancel this attempt while preparation is pending.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (attempt.cancelled) return
@@ -104,7 +108,7 @@ export class DesktopBackendController<Host extends DesktopBackendHost> {
   stop(): Promise<void> {
     if (this.stopping !== undefined) return this.stopping
     const attempt = this.attempt
-    if (attempt !== undefined) attempt.cancelled = true
+    if (attempt !== undefined) { attempt.cancelled = true; attempt.abort.abort() }
     if (!this.closed) this.update({ phase: 'starting' })
     const pending = this.pending
     const stopping = Promise.allSettled([
@@ -126,6 +130,16 @@ export class DesktopBackendController<Host extends DesktopBackendHost> {
   close(): Promise<void> {
     this.closed = true
     return this.stop()
+  }
+
+  /** Prevent further startup and terminate the current attempt without awaiting blocked preparation. */
+  forceClose(): void {
+    this.closed = true
+    const attempt = this.attempt
+    if (attempt === undefined) return
+    attempt.cancelled = true
+    attempt.abort.abort()
+    attempt.host?.forceStop()
   }
 
   private cleanup(attempt: Attempt<Host>): Promise<void> {

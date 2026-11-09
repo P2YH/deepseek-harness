@@ -81,9 +81,12 @@ export class DesktopProjectManager {
 
   /**
    * Load application metadata and prepare the external plugin profile without installing packages.
+   * @param signal - Stop preparation before the next profile operation when Desktop quits.
    */
-  async applyRelease(): Promise<void> {
+  async applyRelease(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
     await this.withLock(async () => {
+      signal?.throwIfAborted()
       // Validation only: an unreadable or mismatched runtime descriptor stops preparation before the Host starts.
       readDesktopRuntime(this.runtime.dsh)
       migrateProfileSettings(this.paths.profile)
@@ -91,6 +94,7 @@ export class DesktopProjectManager {
       removeLinkProjections(this.paths.profile)
       if (this.runtime.bundledPlugins !== undefined) seedBundledPlugins(this.paths.profile, this.runtime.bundledPlugins, this.paths.home)
       if (this.runtime.intranetModelCredentials !== undefined) {
+        signal?.throwIfAborted()
         await seedIntranetModelCredentials(this.paths.home, this.runtime.intranetModelCredentials)
       }
     })

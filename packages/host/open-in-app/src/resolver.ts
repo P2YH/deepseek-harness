@@ -12,12 +12,12 @@
  * the OS shell's open verb — instead of a direct spawn.
  */
 
-import { spawn } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { homedir, platform as osPlatform } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import {
-  canOpenNativePath, openNativePath, runNativeCommand, desktopEntryFields, desktopDataDirectories, type NativeCommandRunner,
+  canOpenNativePath, openNativePath, runNativeCommand, desktopEntryFields, desktopDataDirectories,
+  launchDetachedApplication, type NativeCommandRunner,
 } from '@deepseek-ai/dsh-native-command'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import {
@@ -72,28 +72,7 @@ export type OpenInAppLaunchOutcome = 'launched' | 'missing' | 'failed'
  * @returns after the launch is counted successful; rejects on early failure.
  */
 export const launchDetachedApp: OpenInAppLauncher = (command, args, options) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, [...args], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: options.windowsHide,
-      env: { ...scrubbedParentEnv(), ...options.env },
-    })
-    let settled = false
-    const settle = (outcome: () => void): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(watch)
-      child.unref()
-      outcome()
-    }
-    const watch = setTimeout(() => { settle(resolve) }, options.watchMs)
-    child.on('error', (error) => { settle(() => { reject(error) }) })
-    child.on('exit', (code, signalName) => {
-      if (code === 0) settle(resolve)
-      else settle(() => { reject(new Error(`launcher exited with code ${String(code)}, signal ${String(signalName)}`)) })
-    })
-  })
+  launchDetachedApplication(command, args, { ...options, env: { ...scrubbedParentEnv(), ...options.env } })
 
 /** Injectable platform facts for deterministic tests. */
 export interface OpenInAppInternals {

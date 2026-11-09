@@ -6,7 +6,7 @@ English | [中文](README.zh.md)
 
 Local download and mandatory-dialog evidence is separate from production backend integration, visual acceptance, and installed-application upgrades. Run the command in the [Desktop README](../README.md) to produce a fresh isolated report.
 
-Installed qualification can opt into `DSH_DESKTOP_UPDATE_JOURNAL_DIR`, an absolute directory outside the installation tree that both versions retain. Each main process flushes a separate JSONL file with its installed version, state transitions, and manual-operation milestones. Raw diagnostics and request data are excluded; storage errors propagate. The [journal decision](../../../.agents/notes/implemented/testing/2026-09-14-desktop-installed-update-journal.md) defines evidence limits. Unit and main-entry tests cover the journal; a signed installed upgrade is still unverified.
+Installed qualification can opt into `DSH_DESKTOP_UPDATE_JOURNAL_DIR`, an absolute directory outside the installation tree that both versions retain. Each main process flushes a separate JSONL file with its installed version, state transitions, and manual-operation milestones. Raw diagnostics and request data are excluded; storage errors propagate, except quit records whose failures are reported without blocking exit. The [journal decision](../../../.agents/notes/implemented/testing/2026-09-14-desktop-installed-update-journal.md) defines evidence limits. Unit and main-entry tests cover the journal; a signed installed upgrade is still unverified.
 
 ## Table of Contents
 
@@ -39,6 +39,10 @@ With Host, client, and Desktop artifacts built, run `node --import tsx apps/desk
 <a id="verification-evidence"></a>
 
 ## Evidence
+
+After building Desktop, `node --import tsx apps/desktop/scripts/test-window-quit.ts` from the repository root checks actual Chromium unload vetoes in the main document and an iframe, cancellation, confirmation failure, confirmed discard, clean-document closure, and a second process acquiring the same profile's instance lock after exit. It uses the cached Windows Electron runtime by default; `--electron <path>` selects another prepared runtime. The native discard answer is substituted; main-entry tests cover the localized dialog, Host and tray retention, and teardown ordering.
+
+On Windows, the same native smoke also checks real Electron Node-mode Host ownership: ordinary and forced exit terminate a detached internal worker while preserving an external application, and forced descendant cleanup refuses update installation. Main-entry regressions hold startup preparation and Platform cleanup past the five-second quit deadline, inject a journal write failure and an authentication cleanup rejection, and verify repeated and cancelled quit decisions.
 
 The local command builds Desktop and executes Electron 44 with the actual HTTP updater, policy client, sandboxed preload, and mandatory renderer. It records each scenario and preserves its report under `.desktop-build/qualification/local-updater-*`. The installer call, external browser, and clipboard are observation substitutes; downloaded bytes are not an executable installer.
 

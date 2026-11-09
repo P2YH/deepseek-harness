@@ -20,6 +20,7 @@ export type {
 } from './ffi.ts'
 export {
   closeHandleChecked,
+  createKillOnCloseJob,
   drainPipe,
   isJobEmpty,
   pollProcessExit,

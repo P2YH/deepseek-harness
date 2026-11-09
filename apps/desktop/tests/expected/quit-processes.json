@@ -1,0 +1,5 @@
+{
+  "ordinary": { "internalAlive": false, "externalAlive": true, "updateRefused": false },
+  "forced": { "internalAlive": false, "externalAlive": true, "updateRefused": false },
+  "update": { "internalAlive": false, "externalAlive": true, "updateRefused": true }
+}

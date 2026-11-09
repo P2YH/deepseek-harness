@@ -126,13 +126,21 @@ const harness = await vi.hoisted(async () => {
     setBounds() {}
     setTitle = vi.fn()
     destroy() { this.destroyed = true; this.emit('closed') }
+    preventsUnload = false
     close() {
       const event = { preventDefault: vi.fn() }
       this.emit('close', event)
-      if (event.preventDefault.mock.calls.length === 0) this.destroy()
+      if (event.preventDefault.mock.calls.length !== 0) return
+      if (this.preventsUnload) {
+        const unload = { preventDefault: vi.fn() }
+        this.webContents.emit('will-prevent-unload', unload)
+        if (unload.preventDefault.mock.calls.length === 0) return
+      }
+      this.destroy()
     }
   }
   class FakeHost {
+    readonly forceStop = vi.fn(() => { this.exited.resolve() })
     readonly updateTasks = vi.fn(async (_action: 'inspect' | 'lock' | 'unlock') => false)
     readonly inspectQuit = vi.fn(async () => ({ activeTasks: false, scheduledTasks: false }))
     url = 'http://127.0.0.1:3080/?token=test'
@@ -166,7 +174,7 @@ const harness = await vi.hoisted(async () => {
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
     requestSingleInstanceLock: () => true,
     setAsDefaultProtocolClient: vi.fn(),
-    exit: vi.fn(),
+    exit: vi.fn(() => { app.emit('will-quit'); quitCompleted.resolve() }),
     relaunch: vi.fn(),
     focus: vi.fn(),
     quit: vi.fn(() => {
@@ -174,7 +182,7 @@ const harness = await vi.hoisted(async () => {
       app.emit('before-quit', event)
       if (event.preventDefault.mock.calls.length === 0) {
         if (closeWindowsOnQuit) for (const window of [...windows]) if (!window.isDestroyed()) window.close()
-        if (!closeWindowsOnQuit || windows.every(window => window.isDestroyed())) quitCompleted.resolve()
+        if (!closeWindowsOnQuit || windows.every(window => window.isDestroyed())) { app.emit('will-quit'); quitCompleted.resolve() }
       }
     }),
   })
@@ -907,7 +915,7 @@ describe('desktop main startup', () => {
     } else if (platform === 'win32') {
       expect(window.options).toMatchObject({ titleBarStyle: 'hidden', titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT } })
       expect(window.options).not.toHaveProperty('vibrancy')
-      expect(harness.menu.mock.calls[0]![0]).toEqual([
+      expect(applicationMenuItems().slice(-2)).toEqual([
         { role: 'toggleDevTools', visible: false },
         { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
       ])
@@ -1311,7 +1319,7 @@ describe('desktop main startup', () => {
     return host
   }
 
-  it('hides the workspace before intentional Host shutdown can look like reconnection', async () => {
+  it('closes the workspace before intentional Host shutdown can look like reconnection', async () => {
     const host = await readyWorkspace()
     const window = harness.windows[0]!
     window.show.mockClear()
@@ -1321,7 +1329,7 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(host.inspectQuit).toHaveBeenCalledOnce()
     expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
-    expect(window.hide).toHaveBeenCalledOnce()
+    expect(window.isDestroyed()).toBe(true)
     await host.stopping.promise
     harness.app.emit('second-instance')
     expect(window.show).not.toHaveBeenCalled()
@@ -1461,7 +1469,7 @@ describe('desktop main startup', () => {
     expect(host.inspectQuit).toHaveBeenCalledTimes(2)
     pending.resolve({ response: 0, checkboxChecked: false })
     await vi.advanceTimersByTimeAsync(0)
-    expect(window.hide).toHaveBeenCalledOnce()
+    expect(window.isDestroyed()).toBe(true)
     await host.stopping.promise
     host.exited.resolve()
     await harness.quitCompleted.promise
@@ -1537,6 +1545,158 @@ describe('desktop main startup', () => {
     disposal.resolve()
     await harness.quitCompleted.promise
     expect(harness.app.quit).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['en-US', 'zh-CN'])('does not leave a hidden application after a document prevents unloading during tray quit in %s', async (language) => {
+    vi.spyOn(harness.app, 'getLocale').mockReturnValue(language)
+    vi.spyOn(harness.app, 'getPreferredSystemLanguages').mockReturnValue([language])
+    const host = await readyWorkspace()
+    const window = harness.windows[0]!
+    window.preventsUnload = true
+    harness.closeWindowsOnQuit = true
+    harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
+    try {
+      const messages = language === 'zh-CN' ? zh : en
+      const item = harness.menu.mock.calls.flatMap(([items]) => items).find(item => item.label === messages.quitApplication)!
+      const quit = item.click as () => void
+      quit()
+      await host.stopping.promise
+      const expected = JSON.parse(readFileSync(new URL('./expected/quit-unsaved-changes.json', import.meta.url), 'utf8')) as Record<string, MessageBoxOptions>
+      expect(harness.dialog.showMessageBox.mock.calls[0]![0]).toEqual(expected[language])
+      expect(window.isDestroyed()).toBe(true)
+      host.exited.resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(window.isDestroyed()).toBe(true)
+    } finally {
+      window.preventsUnload = false
+    }
+  })
+
+  it.each(['cancel', 'failure'] as const)('keeps the Host and tray available after unsaved document quit %s', async (outcome) => {
+    const host = await readyWorkspace()
+    const window = harness.windows[0]!
+    window.preventsUnload = true
+    window.hide()
+    const decision = Promise.withResolvers<{ response: number }>()
+    harness.dialog.showMessageBox.mockReturnValueOnce(decision.promise)
+    harness.app.quit()
+    await vi.advanceTimersByTimeAsync(0)
+    harness.app.quit()
+    expect(harness.dialog.showMessageBox).toHaveBeenCalledOnce()
+    expect(host.stop).not.toHaveBeenCalled()
+    expect(harness.trays[0]!.destroy).not.toHaveBeenCalled()
+    if (outcome === 'cancel') decision.resolve({ response: 1 })
+    else decision.reject(new Error('native dialog unavailable'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(host.stop).not.toHaveBeenCalled()
+    expect(window.isDestroyed()).toBe(false)
+    expect(window.visible).toBe(true)
+    expect(window.webContents.listenerCount('will-prevent-unload')).toBe(1)
+    window.preventsUnload = false
+  })
+
+  it('keeps repeated quit requests waiting until Host cleanup completes', async () => {
+    const host = await readyWorkspace()
+    harness.app.quit()
+    await host.stopping.promise
+    harness.app.quit()
+    let completed = false
+    void harness.quitCompleted.promise.then(() => { completed = true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(completed).toBe(false)
+    host.exited.resolve()
+    await harness.quitCompleted.promise
+    expect(host.stop).toHaveBeenCalledOnce()
+  })
+
+  it('forces a stalled Host at the shared five-second deadline without extending it on repeated quit', async () => {
+    const host = await readyWorkspace()
+    harness.app.quit()
+    await host.stopping.promise
+    await vi.advanceTimersByTimeAsync(4_999)
+    harness.app.quit()
+    expect(host.forceStop).not.toHaveBeenCalled()
+    expect(harness.app.exit).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    await harness.quitCompleted.promise
+    expect(host.forceStop).toHaveBeenCalledOnce()
+    expect(harness.app.exit).toHaveBeenCalledExactlyOnceWith(0)
+  })
+
+  it('does not arm forced exit while the unsaved-document decision is cancelled', async () => {
+    const host = await readyWorkspace()
+    harness.windows[0]!.preventsUnload = true
+    harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false })
+    harness.app.quit()
+    await vi.advanceTimersByTimeAsync(6_000)
+    expect(harness.app.exit).not.toHaveBeenCalled()
+    expect(host.stop).not.toHaveBeenCalled()
+    expect(host.forceStop).not.toHaveBeenCalled()
+    harness.windows[0]!.preventsUnload = false
+  })
+
+
+  it('stalled preparation must not retain the instance after tray exit', async () => {
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.app.quit()
+    await vi.advanceTimersByTimeAsync(30_000)
+    let completed = false
+    void harness.quitCompleted.promise.then(() => { completed = true })
+    await vi.advanceTimersByTimeAsync(0)
+    try { expect(completed).toBe(true) }
+    finally { harness.prepared.resolve() }
+  })
+
+  it('stalled Platform storage must not retain the instance after tray exit', async () => {
+    const host = await readyWorkspace()
+    const storage = harness.deferPlatformDispose()
+    harness.app.quit()
+    await host.stopping.promise
+    host.exited.resolve()
+    await vi.advanceTimersByTimeAsync(30_000)
+    let completed = false
+    void harness.quitCompleted.promise.then(() => { completed = true })
+    await vi.advanceTimersByTimeAsync(0)
+    try { expect(completed).toBe(true) }
+    finally { storage.resolve() }
+  })
+
+  it('failed quit journal must not disable all subsequent tray exits', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-review-quit-journal-'))
+    vi.stubEnv('DSH_DESKTOP_UPDATE_JOURNAL_DIR', directory)
+    const host = await readyWorkspace()
+    const file = join(directory, readdirSync(directory)[0]!)
+    rmSync(file)
+    mkdirSync(file)
+    try {
+      harness.app.quit()
+      await vi.advanceTimersByTimeAsync(0)
+      harness.app.quit()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(host.stop).toHaveBeenCalled()
+    } finally {
+      harness.app.removeAllListeners('before-quit')
+      host.exited.resolve()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('rejected optional cleanup must not finish before Host teardown', async () => {
+    harness.embeddedPolicy = { origin: 'https://policy.example.com', authentication: 'feishu-test',
+      allowedAuthOrigins: ['https://login.example.com'], allowedPageOrigins: ['https://downloads.example.com'], intervalMs: 1000, jitter: 0 }
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(async () =>
+      Response.json({ error: { code: 'UNAUTHENTICATED' } }, { status: 401 })))
+    const host = await readyWorkspace()
+    testAuth.dispose.mockRejectedValueOnce(new Error('policy cleanup unavailable'))
+    harness.app.quit()
+    await host.stopping.promise
+    await vi.advanceTimersByTimeAsync(0)
+    let completed = false
+    void harness.quitCompleted.promise.then(() => { completed = true })
+    await vi.advanceTimersByTimeAsync(0)
+    try { expect(completed).toBe(false) }
+    finally { host.exited.resolve() }
   })
 
   it('reports a Platform cleanup failure without ending the Host shutdown early', async () => {

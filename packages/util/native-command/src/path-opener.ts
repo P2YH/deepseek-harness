@@ -16,6 +16,7 @@ import { release as osRelease } from 'node:os'
 import { dirname, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runNativeCommand, type NativeCommandRunner } from './runner.ts'
+import { desktopExternalAction } from './external-application.ts'
 
 /** Testable command boundary; native implementations never invoke a shell. */
 export type PathOpenerRunner = NativeCommandRunner
@@ -171,6 +172,9 @@ async function openNativePathWithIntent(
   intent: PathOpenIntent,
   internals: PathOpenerInternals = {},
 ): Promise<void> {
+  signal.throwIfAborted()
+  const delegated = desktopExternalAction({ kind: 'path', path, intent }, signal)
+  if (delegated !== undefined) return delegated
   const platform = internals.platform ?? process.platform
   const run = internals.run ?? runNativeCommand
   const env = internals.env ?? process.env
@@ -289,6 +293,8 @@ export async function revealNativePath(
   path: string, signal: AbortSignal, internals: PathOpenerInternals = {},
 ): Promise<void> {
   signal.throwIfAborted()
+  const delegated = desktopExternalAction({ kind: 'path', path, intent: 'reveal' }, signal)
+  if (delegated !== undefined) return delegated
   const platform = internals.platform ?? process.platform
   const run = internals.run ?? runNativeCommand
   const manager = nativeFileManager({ ...internals, platform })

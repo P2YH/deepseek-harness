@@ -8,6 +8,8 @@
     "src"
   ],
   "references": [
+    { "path": "../../packages/subprocess/win32-process" },
+    { "path": "../../packages/util/native-command" },
     { "path": "../../packages/util/launch-environment" },
     {
       "path": "../../packages/boot/app-boot"

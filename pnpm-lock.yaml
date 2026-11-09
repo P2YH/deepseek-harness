@@ -672,6 +672,9 @@ importers:
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9(supports-color@9.4.0)
+      koffi:
+        specifier: 3.1.1
+        version: 3.1.1
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -712,6 +715,12 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:*
         version: link:../../packages/util/launch-environment
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:*
+        version: link:../../packages/util/native-command
+      '@deepseek-ai/dsh-win32-process':
+        specifier: workspace:*
+        version: link:../../packages/subprocess/win32-process
       '@deepseek-ai/node-addon-system':
         specifier: workspace:~
         version: link:../../native/system/packages/entry
@@ -751,9 +760,6 @@ importers:
       js-yaml:
         specifier: ^4.3.2
         version: 4.3.2
-      koffi:
-        specifier: 3.1.1
-        version: 3.1.1
       pnpm:
         specifier: 11.28.5
         version: 11.28.5

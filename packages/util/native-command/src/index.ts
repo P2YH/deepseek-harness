@@ -4,6 +4,9 @@
  */
 
 export { runNativeCommand } from './runner.ts'
+export { desktopExternalAction, launchDetachedApplication } from './external-application.ts'
+export type { DesktopExternalAction, DetachedApplicationOptions } from './external-application.ts'
+export { dispatchDesktopExternalAction } from './external-application-broker.ts'
 export type { NativeCommandRunner } from './runner.ts'
 export {
   canOpenNativePath,

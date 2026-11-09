@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,15 @@ import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError,
 
 const roots: string[] = []
 const hosts: DesktopHostProcess[] = []
+
+function alive(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false
+    throw error
+  }
+}
+
+const OWNED_AND_EXTERNAL_HOST = readFileSync(new URL('./fixtures/owned-host.mjs', import.meta.url), 'utf8')
 
 const HTTP_HOST = `
 import { createServer } from 'node:http'
@@ -73,6 +82,39 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it.skipIf(process.platform !== 'win32').each(['ordinary', 'forced', 'update'] as const)(
+    'cleans detached internal processes and preserves external applications during %s shutdown', async (mode) => {
+      const project = projectWithHost(OWNED_AND_EXTERNAL_HOST)
+      const host = hostProcess(project)
+      let external: number | undefined
+      try {
+        await host.start()
+        const internal = Number(readFileSync(join(project, 'internal.pid'), 'utf8'))
+        external = Number(readFileSync(join(project, 'external.pid'), 'utf8'))
+        expect(alive(internal)).toBe(true)
+        expect(alive(external)).toBe(true)
+        let updateRefused = false
+        if (mode === 'forced') { host.forceStop(); await host.stop() }
+        else if (mode === 'update') {
+          const error = await host.stop(true).catch((error: unknown) => error)
+          updateRefused = error instanceof DesktopHostUncleanExitError
+        } else await host.stop()
+        await expect.poll(() => alive(internal)).toBe(false)
+        const expected = JSON.parse(readFileSync(new URL('./expected/quit-processes.json', import.meta.url), 'utf8')) as
+          Record<string, { internalAlive: boolean; externalAlive: boolean; updateRefused: boolean }>
+        expect({ internalAlive: alive(internal), externalAlive: alive(external), updateRefused }).toEqual(expected[mode])
+      } finally {
+        await host.stop()
+        if (external === undefined && existsSync(join(project, 'external.pid'))) external = Number(readFileSync(join(project, 'external.pid'), 'utf8'))
+        if (external !== undefined && alive(external)) {
+          process.kill(external, 'SIGKILL')
+          const pid = external
+          await expect.poll(() => alive(pid)).toBe(false)
+        }
+      }
+    }, 15_000,
+  )
+
   it('correlates task inspections and admission changes over private IPC', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.updateTasks('inspect')).rejects.toThrow('Host is unavailable')

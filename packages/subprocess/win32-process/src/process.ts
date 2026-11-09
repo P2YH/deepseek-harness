@@ -337,7 +337,12 @@ export function waitForProcessExit(api: Win32ProcessBindings, process: NativePtr
   }
 }
 
-function createKillOnCloseJob(api: Win32ProcessBindings): NativePtr {
+/**
+ * Create an unnamed Job that terminates its members when the owner closes its handle.
+ * @param api - Active Win32 bindings.
+ * @returns Caller-owned, non-inheritable Job handle.
+ */
+export function createKillOnCloseJob(api: Win32ProcessBindings): NativePtr {
   const job = api.createJobObjectW(null, null)
   if (isNullPtr(job)) throwLastError(api, 'CreateJobObjectW')
   const information = Buffer.alloc(abi.JOBOBJECT_EXTENDED_LIMIT_SIZE)

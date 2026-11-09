@@ -1,0 +1,22 @@
+{
+  "en-US": {
+    "type": "warning",
+    "title": "DeepSeek Harness",
+    "message": "Quit DeepSeek Harness?",
+    "detail": "A document has unsaved changes. Quitting will discard them. Cancel to return and save your work.",
+    "buttons": ["Discard Changes and Quit", "Cancel"],
+    "defaultId": 1,
+    "cancelId": 1,
+    "noLink": true
+  },
+  "zh-CN": {
+    "type": "warning",
+    "title": "DeepSeek Harness",
+    "message": "退出 DeepSeek Harness？",
+    "detail": "文档中有未保存的更改，退出将丢弃这些更改。请选择取消，返回保存后再退出。",
+    "buttons": ["丢弃更改并退出", "取消"],
+    "defaultId": 1,
+    "cancelId": 1,
+    "noLink": true
+  }
+}

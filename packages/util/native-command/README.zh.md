@@ -51,6 +51,8 @@ const { stdout, stderr } = await runNativeCommand('osascript', ['-e', script], s
 
 `nativeFileApplications(path, signal)` 返回关联应用、本地化名称、图标和当前默认项。macOS 12 及以上版本使用 LaunchServices，Windows 使用 Shell 关联处理器并在提取前解析打包应用的间接图标引用，Linux 使用 GIO，并共用 XDG 桌面文件和图标读取逻辑。macOS 上 bundle 标识符与显示名都相同的多份拷贝（自更新暂存副本、按版本安装的拷贝）合并为系统默认项，否则保留最高版本；显示名不同的并存安装两项都保留。`openNativeFileApplication(path, application, signal)` 按完整的当前注册列表重新验证关联应用，展示列表中被合并掉的拷贝仍可打开，且不修改系统默认值。Windows 交给 Shell 启动应用，Linux 交给 `gio launch` 展开参数。WSL 转换路径后使用 Windows 适配器。调用方负责验证本地文件路径。原生集成测试分别在相应平台使用独立的 Windows 文件关联和 Linux XDG 目录。
 
+`launchDetachedApplication(command, args, options)` 观察启动初期失败，同时允许应用在调用方退出后继续运行；options 包含完整环境、可见性与观察时限。调用方在传入环境前清除凭据。Windows Desktop Host 通过私有 IPC 将外部启动与路径打开操作交给 Electron 壳，在 Host Job 之外执行。未收到回复会在有限时间内失败；取消路径请求会停止等待，但不能撤销已经发出的启动。壳会重新验证文件关联应用请求。普通命令执行仍由 Host 拥有。
+
 -----
 
 <a id="understand-the-implementation"></a>

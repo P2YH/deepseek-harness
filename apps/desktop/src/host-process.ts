@@ -4,6 +4,8 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
 import { desktopNodeEnvironment } from './node-environment.ts'
+import { dispatchDesktopExternalAction } from '@deepseek-ai/dsh-native-command'
+import { DesktopHostJob, DESKTOP_HOST_JOB_PRELOAD } from './host-job.ts'
 
 interface ReadyEvent {
   readonly type: 'ready'
@@ -137,6 +139,7 @@ export class DesktopHostFatalError extends Error {
 /** One Web backend running under the Electron executable in Node mode. */
 export class DesktopHostProcess {
   private child: ChildProcess | undefined
+  private job: DesktopHostJob | undefined
   private readyResolve!: (ready: DesktopHostReady) => void
   private readyReject!: (error: Error) => void
   private readonly readyPromise = new Promise<DesktopHostReady>((resolve, reject) => {
@@ -148,6 +151,8 @@ export class DesktopHostProcess {
   private failureReported = false
   private stopping = false
   private shutdownCompleted = false
+  private forcedDescendants = false
+  private jobCleanupFailure: unknown
   private nextControlId = 1
   private readonly controlRequests = new Map<number, {
     resolve: (response: DesktopHostControlResponse) => void
@@ -186,8 +191,10 @@ export class DesktopHostProcess {
   async start(): Promise<DesktopHostReady> {
     if (this.child !== undefined) return this.readyPromise
     const entry = join(this.runtimeDir, 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'index.js')
+    if (process.platform === 'win32') this.job = new DesktopHostJob()
     const child = spawn(this.node, [
       '--expose-internals',
+      ...(this.job === undefined ? [] : ['--import', DESKTOP_HOST_JOB_PRELOAD]),
       ...(this.inspectPort === undefined ? [] : [`--inspect=127.0.0.1:${String(this.inspectPort)}`]),
       entry,
       this.runtimeDir,
@@ -196,7 +203,8 @@ export class DesktopHostProcess {
       ...this.packageManager === undefined ? [] : [this.packageManager.pnpm, this.packageManager.nodeBin],
     ], {
       cwd: this.projectDir,
-      env: desktopNodeEnvironment(this.node, undefined, this.environment),
+      env: desktopNodeEnvironment(this.node, undefined, { ...this.environment,
+        ...(this.job === undefined ? {} : { DSH_DESKTOP_EXTERNAL_APPLICATION_PARENT_PID: String(process.pid) }) }),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     this.child = child
@@ -204,6 +212,22 @@ export class DesktopHostProcess {
     child.stderr?.on('data', (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-MAX_HOST_DIAGNOSTIC_CHARS) })
     child.stdout?.pipe(process.stdout)
     child.on('message', (message: unknown) => {
+      try {
+        if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'desktop-host-job-ready') {
+          if (this.job === undefined || child.pid === undefined) throw new Error('desktop Host Job barrier without a child')
+          if (this.stopping) { this.forceStop(); return }
+          this.job.assign(child.pid)
+          child.send({ type: 'desktop-host-job-start' }, (error) => { if (error !== null) this.fail(error) })
+          return
+        }
+        if (dispatchDesktopExternalAction(message, (reply) => {
+          if (child.connected) child.send(reply, (error) => { if (error !== null && !this.stopping) this.fail(error) })
+        })) return
+      } catch (error) {
+        this.fail(error instanceof Error ? error : new Error('desktop Host control failed', { cause: error }))
+        this.forceStop()
+        return
+      }
       if (!isDesktopHostEvent(message)) {
         this.fail(new Error('dsh desktop host sent an invalid IPC event'))
         child.kill('SIGTERM')
@@ -223,12 +247,24 @@ export class DesktopHostProcess {
       }
     })
     child.once('error', (error) => { this.fail(error) })
+    // Descendants can inherit stdout; terminate them on exit so close cannot wait on their pipes.
+    child.once('exit', () => {
+      try {
+        this.forcedDescendants = this.job !== undefined && !this.job.empty
+        this.job?.terminate()
+      } catch (error) { this.fail(error instanceof Error ? error : new Error('desktop Host Job cleanup failed', { cause: error })) }
+    })
     this.exitPromise = new Promise<void>((resolve) => {
       child.once('close', (code) => {
-        const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
-        if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
-        else this.fail(new Error(`dsh desktop host stopped${suffix}`))
-        resolve()
+        const settle = async (): Promise<void> => {
+          try { await this.job?.waitForExit() } finally { this.job?.close(); this.job = undefined }
+        }
+        void settle().catch((error: unknown) => { this.jobCleanupFailure = error }).finally(() => {
+          const suffix = this.stderr.trim() === '' ? '' : `: ${this.stderr.trim()}`
+          if (code !== 0 && code !== null) this.fail(new Error(`dsh desktop host exited with ${String(code)}${suffix}`))
+          else this.fail(new Error(`dsh desktop host stopped${suffix}`))
+          resolve()
+        })
       })
     })
     return this.readyPromise
@@ -301,10 +337,17 @@ export class DesktopHostProcess {
       }
     }
     this.child = undefined
-    if (requireGraceful && (!graceful || child.exitCode !== 0 || !this.shutdownCompleted)) {
+    if (this.jobCleanupFailure !== undefined) throw new Error('desktop Host Job cleanup failed', { cause: this.jobCleanupFailure })
+    if (requireGraceful && (!graceful || child.exitCode !== 0 || !this.shutdownCompleted || this.forcedDescendants)) {
       // This diagnostic reaches expandable UI; arbitrary plugin stderr can contain credentials.
-      throw new DesktopHostUncleanExitError(`desktop update: Host did not complete graceful task teardown (exit ${String(child.exitCode)}, signal ${String(child.signalCode)}, shutdown acknowledged ${String(this.shutdownCompleted)}, graceful deadline exceeded ${String(!graceful)})`)
+      throw new DesktopHostUncleanExitError(`desktop update: Host did not complete graceful task teardown (exit ${String(child.exitCode)}, signal ${String(child.signalCode)}, shutdown acknowledged ${String(this.shutdownCompleted)}, graceful deadline exceeded ${String(!graceful)}, descendants forced ${String(this.forcedDescendants)})`)
     }
+  }
+
+  /** End the Host and its owned descendants immediately after ordinary quit exhausts its budget. */
+  forceStop(): void {
+    this.stopping = true
+    try { this.job?.terminate() } finally { this.child?.kill('SIGKILL') }
   }
 
   private fail(error: Error): void {

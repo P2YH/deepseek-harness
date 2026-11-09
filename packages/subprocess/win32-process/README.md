@@ -32,6 +32,8 @@ This low-level Win32 process library is consumed by the Windows ACL sandbox and 
 - **Ordinary settlement operations** — `pollProcessExit()` publishes direct exit separately, while `isJobEmpty()` reads `QueryInformationJobObject(JobObjectBasicAccountingInformation)` until `ActiveProcesses` reaches zero. Checked Job termination and handle closure keep the runner as the only native owner.
 - **Explicit settlement ownership** — `waitForProcessExit()` waits and closes a sandbox process handle; ordinary runner process polling, Job accounting, and checked Job termination/closure remain separate operations. `drainPipe()` reuses one native count slot while draining, frees it, and closes the pipe read handle. Each caller owns its result composition and returned handles.
 
+`createKillOnCloseJob()` returns a caller-owned, non-inheritable Job handle for an existing process launcher. The caller must prevent application code from running before assignment, await member exit after termination, and close the handle on every outcome. Desktop uses this primitive for Host ownership without replacing Node IPC.
+
 Process creation sets `STARTF_USESHOWWINDOW` with `SW_HIDE` before target code runs. It preserves console inheritance and does not add `CREATE_NO_WINDOW` or `CREATE_NEW_CONSOLE`, which can fail DLL initialization under the restricted token. Existing parent console windows are not hidden.
 
 The Windows ACL sandbox adds SID, DACL, grant, workspace, and public child policy above these primitives.

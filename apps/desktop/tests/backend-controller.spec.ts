@@ -18,6 +18,7 @@ function fixture() {
   const host = {
     start: vi.fn(() => { started.resolve(); return ready.promise }),
     stop: vi.fn(() => { stopping.resolve(); return exited.promise }),
+    forceStop: vi.fn(),
   }
   const create = vi.fn((onFailure: (error: Error) => void) => { fail = onFailure; return host })
   const controller = new DesktopBackendController(create, state => states.push(state))
@@ -25,6 +26,34 @@ function fixture() {
 }
 
 describe('desktop backend controller', () => {
+  it('aborts preparation on close and never starts its Host after cancellation', async () => {
+    const f = fixture()
+    const preparing = deferred()
+    let signal: AbortSignal | undefined
+    const start = f.controller.start(async (next) => {
+      signal = next
+      preparing.resolve()
+      await new Promise<void>((resolve) => { next.addEventListener('abort', () => { resolve() }, { once: true }) })
+    })
+    await preparing.promise
+    await f.controller.close()
+    await start
+    expect(signal?.aborted).toBe(true)
+    expect(f.create).not.toHaveBeenCalled()
+  })
+
+  it('force-closes a Host even while normal cleanup is awaiting its exit', async () => {
+    const f = fixture()
+    f.ready.resolve()
+    await f.controller.start(async () => {})
+    const closing = f.controller.close()
+    await f.stopping.promise
+    f.controller.forceClose()
+    expect(f.host.forceStop).toHaveBeenCalledOnce()
+    f.exited.resolve()
+    await closing
+    await expect(f.controller.start(async () => {})).rejects.toThrow('closed')
+  })
   it('shares preparation and startup between concurrent retries', async () => {
     const f = fixture()
     const prepare = vi.fn(async () => {})

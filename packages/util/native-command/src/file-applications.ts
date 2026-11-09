@@ -1,5 +1,6 @@
 /** Native file associations queried from the desktop that owns the path. */
 import { runNativeCommand } from './runner.ts'
+import { desktopExternalAction } from './external-application.ts'
 import { linuxFileApplications } from './file-applications-linux.ts'
 import { windowsFileApplications } from './file-applications-windows.ts'
 import { nativeFileManager } from './path-opener.ts'
@@ -171,6 +172,9 @@ function compareVersions(left: string | null, right: string | null): number {
 export async function openNativeFileApplication(
   path: string, application: string, signal: AbortSignal, internals: PathOpenerInternals = {},
 ): Promise<void> {
+  signal.throwIfAborted()
+  const delegated = desktopExternalAction({ kind: 'file', path, application }, signal)
+  if (delegated !== undefined) return delegated
   const target = await desktopTarget(path, signal, internals)
   const run = internals.run ?? runNativeCommand
   if (target.platform === 'win32') {

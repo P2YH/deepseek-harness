@@ -60,6 +60,7 @@ import { DesktopBrowserGuests } from './browser-guests.ts'
 import { installDesktopShortcuts } from './keyboard.ts'
 import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
+import { closeDesktopWindowForQuit } from './quit-window.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
 
@@ -359,6 +360,11 @@ async function main(): Promise<void> {
     hostEnvironment = { ...await loginShell, DSH_DISTRIBUTION_MODE: distributionMode }
   }
   let quitting = false
+  let closingForQuit = false
+  let quitCleanupCompleted = false
+  let quitForced = false
+  let quitDeadline: ReturnType<typeof setTimeout> | undefined
+  app.on('will-quit', () => { clearTimeout(quitDeadline) })
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
   let mainWindow: BrowserWindow | undefined
@@ -528,6 +534,7 @@ async function main(): Promise<void> {
           updateStopFailure = error
         }
       },
+      forceStop: () => { host.forceStop() },
       updateTasks: (action: 'inspect' | 'lock' | 'unlock') => host.updateTasks(action),
       inspectQuit: () => host.inspectQuit(),
     }
@@ -595,8 +602,8 @@ async function main(): Promise<void> {
       // install. The renderer has its own boot wait state, so expose it immediately
       // instead of leaving the application apparently unresponsive.
       if (mainWindow !== undefined && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.showInactive()
-      await backend.start(async () => {
-        await Promise.all([manager.applyRelease(), prepareHostEnvironment()])
+      await backend.start(async (signal) => {
+        await Promise.all([manager.applyRelease(signal), prepareHostEnvironment()])
       })
       if (backend.host !== undefined) await openInitialWindow()
       if (backend.host !== undefined) updateJournal?.action('workspace-ready')
@@ -1105,7 +1112,7 @@ async function main(): Promise<void> {
     window.on('focus', automaticCheck)
     // Closing hides: the page and the Host keep running, and the next show resumes the same document.
     window.on('close', (event) => {
-      if (quitting || shellInstallerOwnsQuit || sessionEnding) return
+      if (closingForQuit || quitting || shellInstallerOwnsQuit || sessionEnding) return
       event.preventDefault()
       if (updateDialog.isOpen) { updateDialog.focus(); return }
       const hide = (): void => {
@@ -1125,6 +1132,10 @@ async function main(): Promise<void> {
       window.on('show', () => { sessionEnding = false })
     }
     window.on('closed', () => { if (mainWindow === window) mainWindow = undefined })
+    window.webContents.on('will-prevent-unload', (event) => {
+      // Recovery and session-end paths may already have stopped the Host.
+      if (quitting || sessionEnding) event.preventDefault()
+    })
     window.webContents.on('console-message', (details) => {
       if (details.level !== 'error') return
       rendererConsole.push(`${details.sourceId}:${String(details.lineNumber)} ${details.message}`)
@@ -1280,27 +1291,65 @@ async function main(): Promise<void> {
   const finishQuit = (): void => {
     quitting = true
     shuttingDown = true
-    updateJournal?.action('quit-requested')
-    quitConfirmation.dispose()
-    backgroundNotice?.dispose()
-    tray?.dispose()
-    stopAccount?.()
-    if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
-    if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
-    updateSchedule.dispose()
-    updateDialog.dispose()
-    mandatoryUI?.dispose()
-    void Promise.all([Promise.resolve(mandatoryPolicy?.dispose()).then(() => policyAuth?.dispose()), backend.close(),
-      // A Platform cleanup failure is logged without cutting the remaining Host shutdown short.
-      platformView?.dispose().catch((error: unknown) => { console.error(error) })])
-      .catch((error: unknown) => { console.error(error) }).finally(() => { app.quit() })
+    // User decisions precede this budget; pending storage or preparation cannot retain the instance.
+    quitDeadline = setTimeout(() => {
+      quitForced = true
+      try { backend.forceClose() } catch (error) { console.error('desktop quit: forced cleanup failed', error) }
+      app.exit(0)
+    }, 5_000)
+    loginShellRead.abort()
+    const cleanups: readonly (() => void | Promise<void>)[] = [
+      () => { updateJournal?.action('quit-requested') },
+      () => { quitConfirmation.dispose() },
+      () => { backgroundNotice?.dispose() },
+      () => { tray?.dispose() },
+      () => { stopAccount?.() },
+      () => { if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide() },
+      () => { if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide() },
+      () => { updateSchedule.dispose() },
+      () => { updateDialog.dispose() },
+      () => { mandatoryUI?.dispose() },
+      async () => { try { await mandatoryPolicy?.dispose() } finally { await policyAuth?.dispose() } },
+      () => backend.close(),
+      () => platformView?.dispose(),
+    ]
+    void Promise.allSettled(cleanups.map(async (cleanup) => {
+      try { await cleanup() } catch (error) { console.error(error); throw error }
+    })).then(() => {
+      if (quitForced) return
+      quitCleanupCompleted = true
+      app.quit()
+    })
+  }
+  const closeAndQuit = async (): Promise<void> => {
+    if (closingForQuit || quitting) return
+    closingForQuit = true
+    try {
+      const window = mainWindow
+      if (window !== undefined && !window.isDestroyed()) {
+        const closed = await closeDesktopWindowForQuit(window, async () => {
+          const { messages } = currentDesktopLocale()
+          const result = await dialog.showMessageBox({ type: 'warning', title: messages.aboutProduct,
+            message: messages.quitTitle, detail: messages.quitUnsavedChanges,
+            buttons: [messages.quitDiscardChanges, messages.cancel], defaultId: 1, cancelId: 1, noLink: true })
+          return result.response === 0
+        })
+        if (!closed || isQuitting() || shellInstallerOwnsQuit) return
+      }
+      finishQuit()
+    } catch (error) {
+      console.error('desktop quit: workspace close failed', error)
+    } finally {
+      closingForQuit = false
+      if (!isQuitting() && !shellInstallerOwnsQuit) focusPrimaryWindow()
+    }
   }
   app.on('before-quit', (event) => {
     if (shellInstallerOwnsQuit) {
       shuttingDown = true
       quitConfirmation.dispose()
       backgroundNotice?.dispose()
-      updateJournal?.action('quit-requested')
+      try { updateJournal?.action('quit-requested') } catch (error) { console.error(error) }
       tray?.dispose()
       updateDialog.dispose()
       mandatoryUI?.dispose()
@@ -1308,12 +1357,16 @@ async function main(): Promise<void> {
       void platformView?.dispose().catch((error: unknown) => { console.error(error) })
       return
     }
-    if (quitting) return
+    if (quitting) {
+      if (!quitCleanupCompleted) event.preventDefault()
+      return
+    }
     event.preventDefault()
     if (skipQuitConfirmation || sessionEnding) { finishQuit(); return }
+    if (closingForQuit) return
     void quitConfirmation.confirm().then((approved) => {
       if (quitting || shellInstallerOwnsQuit) return
-      if (approved) { finishQuit(); return }
+      if (approved) { void closeAndQuit(); return }
       // A quit that started from closing the welcome window destroyed it; a cancelled quit needs it back.
       if (!enteredWorkspace && !recovery.active) void showWelcome().catch((error: unknown) => { reportFatal(error, 'main') })
     }).catch((error: unknown) => { console.error(error); if (!quitting && !shellInstallerOwnsQuit) finishQuit() })
