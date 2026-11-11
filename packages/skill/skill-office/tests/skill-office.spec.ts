@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('node:sea', () => ({ isSea: vi.fn(() => false) }))
 
 const assets = fileURLToPath(new URL('../assets/', import.meta.url))
-const names = ['office', 'office-docx', 'office-export-pdf', 'office-pptx', 'office-recalculate', 'office-render', 'office-xlsx']
+const names = ['office', 'office-docx', 'office-export-pdf', 'office-pdf', 'office-pptx', 'office-recalculate', 'office-render', 'office-xlsx']
 
 describe('bundled Office skills', () => {
   it('keeps routing and authoring within the progressive context budgets', async () => {
@@ -27,6 +27,12 @@ describe('bundled Office skills', () => {
       const route = (await ctx.skills.get('office'))!
       expect(Math.ceil(route.description.length / 4)).toBeLessThanOrEqual(50)
       expect(Math.ceil(route.content.length / 4)).toBeLessThanOrEqual(200)
+      expect(route.content).toContain('office-pdf')
+      const pdf = (await ctx.skills.get('office-pdf'))!
+      expect(pdf.content).toContain('load_workspace_dependencies')
+      expect(pdf.content).toContain('from pypdf import PdfReader')
+      expect(pdf.content).toContain('No text layer; this page remains unread')
+      expect(Math.ceil(pdf.content.length / 4)).toBeLessThanOrEqual(600)
       for (const [name, previousTokens] of [['office-docx', 1688], ['office-pptx', 1879], ['office-xlsx', 2330]] as const) {
         const skill = (await ctx.skills.get(name))!
         expect(Math.ceil(skill.content.length / 4)).toBeLessThanOrEqual(Math.floor(previousTokens * 0.65))

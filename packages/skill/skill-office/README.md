@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-The catalog lists the Office router and six authoring or operation skills. Full instructions load on demand. Authoring skills use the selected Python libraries; operation skills supply the configured Node and LibreOffice Kit CLI paths. SDK and Desktop mount the skill provider and dependency query separately.
+The catalog lists the Office router and format or operation skills. Full instructions load on demand. Format skills read originals with the selected Python libraries; operation skills supply the configured Node and LibreOffice Kit CLI paths. SDK and Desktop mount the skill provider and dependency query separately.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ Mount the skill provider beside the skill registry and `dsh-tool-skill`. The pro
 
 | Field | Default | Meaning |
 |---|---|---|
-| `assetRoot` | Carrier resources or packaged `assets/` | Absolute directory containing the seven skill folders. |
+| `assetRoot` | Carrier resources or packaged `assets/` | Absolute directory containing all bundled skill folders. |
 | `node` | Host Node.js | Standalone Node executable for operation skills; packaged carriers supply it explicitly. |
 | `cli` | Installed Kit CLI | Absolute CLI entry; `false` disables operation execution. |
 
@@ -44,17 +44,20 @@ Invalid skill assets reject registration. Authoring instructions do not resolve 
 <a id="progressive-loading"></a>
 ### Progressive loading
 
-The model chooses skills from the task; the host does not inject complete instructions based on file extensions. All seven skills are listed and loadable by name through `skill` or explicit user invocation. Requested appearance changes, including spreadsheet cell fills and text alignment, require rendering even without an explicit visual-check request; an explicit request to skip rendering takes precedence. Pure operations can enter the corresponding skill directly.
+The model chooses skills from the task; the host does not inject complete instructions based on file extensions. All bundled skills are listed and loadable by name through `skill` or explicit user invocation. Requested appearance changes, including spreadsheet cell fills and text alignment, require rendering even without an explicit visual-check request; an explicit request to skip rendering takes precedence. Pure operations can enter the corresponding skill directly.
 
 ```mermaid
 flowchart TD
-    A["Initial catalog: seven Office summaries"]
+    A["Initial catalog: Office summaries"]
     A -->|Non-Office task| N["Continue without loading Office instructions"]
     A -->|Office task| B["skill(office): task routing"]
 
     B -->|Create or edit| C["skill(office-docx / office-pptx / office-xlsx)"]
     C --> D["Author and validate content, structure and data"]
     D -->|No additional operation needed| F["Deliver"]
+    B -->|Read PDF text| Q["skill(office-pdf)"]
+    Q --> QR["Python: read the original with pypdf"]
+    QR --> F
 
     B -->|Images, visual inspection, or appearance changes| R["skill(office-render)"]
     D -->|Images, visual inspection, or appearance changes| R
@@ -79,6 +82,8 @@ New files and content, data, or formula edits do not require rendering solely be
 
 -----
 
+Original attachment delivery is unchanged. For offline reading, `office-pdf` uses bundled pypdf, `office-docx` uses python-docx, and `office-xlsx` uses openpyxl or xlrd for legacy XLS. The interpreter comes from `load_workspace_dependencies`; missing bundled libraries require runtime repair rather than online installation. Long extracts can remain in the session workspace for incremental reading.
+
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
@@ -93,7 +98,7 @@ The provider registers no tools or activation projection. Loaded skill results r
 |---|---|
 | [`src/index.ts`](src/index.ts) | Resource registration and unchanged skill bodies. |
 
-| [`assets/`](assets/) | Router and six subskills. |
+| [`assets/`](assets/) | Router and format or operation guides. |
 
 </details>
 
@@ -123,7 +128,8 @@ Skill results append to history without changing tool declarations, and loaded t
 
 - The provider does not install authoring libraries.
 - LibreOffice output can differ from native Office applications.
-- Legacy, encrypted, and macro-enabled files need an appropriate separate workflow.
+- XLSB, encrypted files, legacy editing, and advanced macro preservation need a supported separate workflow.
+- PDF text extraction does not perform OCR or establish table, chart, or image semantics.
 
 <a id="dev-note"></a>
 ### Dev Note

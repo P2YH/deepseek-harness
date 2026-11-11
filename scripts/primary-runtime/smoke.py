@@ -19,10 +19,13 @@ from docx.shared import Inches as DocxInches
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 from PIL import Image
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.util import Inches
+import xlrd
 
 
 def check_interpreters():
@@ -49,6 +52,11 @@ def check_interpreters():
 def main():
     """Check installed versions and read back editable Office documents."""
     assert sys.version_info[:3] == tuple(map(int, sys.argv[2].split("."))), sys.version
+    # Document parsing in the release payload must also succeed without a network connection.
+    def offline(event, _args):
+        if event == "socket.connect":
+            raise RuntimeError("Office runtime smoke does not permit network access")
+    sys.addaudithook(offline)
     check_interpreters()
     versions = json.loads(sys.argv[1])
     # Only pip belongs to the interpreter baseline; all other distributions must be declared.
@@ -91,6 +99,23 @@ def main():
         reopened_document = Document(root / "document.docx")
         assert reopened_document.tables[0].cell(1, 1).text == "42"
         assert reopened_document.paragraphs[0].text == "Office 文档"
+
+        pdf = PdfWriter()
+        page = pdf.add_blank_page(width=200, height=200)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
+        stream = DecodedStreamObject()
+        stream.set_data(b"BT /F1 12 Tf 30 100 Td (Offline budget 120) Tj ET")
+        page.replace_contents(stream)
+        pdf.add_blank_page(width=200, height=200)
+        pdf.write(root / "document.pdf")
+        with PdfReader(root / "document.pdf") as reader:
+            assert len(reader.pages) == 2
+            assert "Offline budget 120" in reader.pages[0].extract_text()
+            assert not reader.pages[1].extract_text().strip()
+        assert xlrd.__version__ == versions["xlrd"]
 
         presentation = Presentation()
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])

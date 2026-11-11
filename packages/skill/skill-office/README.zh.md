@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-目录列出 Office 路由及六个创作或操作技能，完整说明按需加载。创作技能使用选定的 Python 库；操作技能提供配置的 Node 与 LibreOffice Kit CLI 路径。SDK 和 Desktop 分别挂载技能提供者和依赖查询。
+目录列出 Office 路由及格式或操作技能，完整说明按需加载。格式技能使用选定的 Python 库读取原件；操作技能提供配置的 Node 与 LibreOffice Kit CLI 路径。SDK 和 Desktop 分别挂载技能提供者和依赖查询。
 
 ## 目录
 
@@ -35,7 +35,7 @@ kind: "package-reference"
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `assetRoot` | 载体资源或包内 `assets/` | 包含七个技能目录的绝对路径。 |
+| `assetRoot` | 载体资源或包内 `assets/` | 包含全部随包技能目录的绝对路径。 |
 | `node` | 宿主 Node.js | 操作技能使用的独立 Node 可执行程序；打包载体显式提供。 |
 | `cli` | 已安装 Kit CLI | CLI 入口的绝对路径；`false` 禁用操作执行。 |
 
@@ -44,17 +44,20 @@ kind: "package-reference"
 <a id="progressive-loading"></a>
 ### 渐进加载
 
-模型依据任务选择技能；宿主不会根据文件扩展名注入完整说明。七个技能均列入目录，可通过 `skill` 按名称加载或由用户显式调用。用户要求的外观修改，包括电子表格单元格填充和文本对齐，即使没有明确要求视觉检查，也需要渲染；用户明确要求跳过渲染时以该要求为准。纯操作任务可以直接进入对应技能。
+模型依据任务选择技能；宿主不会根据文件扩展名注入完整说明。全部随包技能均列入目录，可通过 `skill` 按名称加载或由用户显式调用。用户要求的外观修改，包括电子表格单元格填充和文本对齐，即使没有明确要求视觉检查，也需要渲染；用户明确要求跳过渲染时以该要求为准。纯操作任务可以直接进入对应技能。
 
 ```mermaid
 flowchart TD
-    A["Initial catalog: seven Office summaries"]
+    A["Initial catalog: Office summaries"]
     A -->|Non-Office task| N["Continue without loading Office instructions"]
     A -->|Office task| B["skill(office): task routing"]
 
     B -->|Create or edit| C["skill(office-docx / office-pptx / office-xlsx)"]
     C --> D["Author and validate content, structure and data"]
     D -->|No additional operation needed| F["Deliver"]
+    B -->|Read PDF text| Q["skill(office-pdf)"]
+    Q --> QR["Python: read the original with pypdf"]
+    QR --> F
 
     B -->|Images, visual inspection, or appearance changes| R["skill(office-render)"]
     D -->|Images, visual inspection, or appearance changes| R
@@ -79,6 +82,8 @@ flowchart TD
 
 -----
 
+原附件交付方式保持不变。离线读取时，`office-pdf` 使用随包 pypdf，`office-docx` 使用 python-docx，`office-xlsx` 使用 openpyxl 或面向旧版 XLS 的 xlrd。解释器来自 `load_workspace_dependencies`；随包库缺失时需要修复运行时，不在线安装。长文本可保存在会话工作区，供分段读取。
+
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
@@ -93,7 +98,7 @@ flowchart TD
 |---|---|
 | [`src/index.ts`](src/index.ts) | 注册资源并返回原始技能正文。 |
 
-| [`assets/`](assets/) | 路由与六个子技能。 |
+| [`assets/`](assets/) | 路由与格式或操作指南。 |
 
 </details>
 
@@ -123,7 +128,8 @@ flowchart TD
 
 - 提供者不安装创作库。
 - LibreOffice 输出可能不同于原生 Office 应用。
-- 旧格式、加密和启用宏的文件需要适用的独立工作流。
+- XLSB、加密文件、旧格式编辑及复杂宏保留需要支持这些操作的独立工作流。
+- PDF 文字提取不执行 OCR，也不确定表格、图表或图像的语义。
 
 <a id="dev-note"></a>
 ### 开发备注
