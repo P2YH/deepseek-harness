@@ -1,0 +1,3 @@
+- menu "Model and reasoning effort":
+  - menuitemradio "Off" [checked]
+  - menuitemradio "High"

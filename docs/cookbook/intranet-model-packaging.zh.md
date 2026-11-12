@@ -28,7 +28,7 @@
 | 原始地址 | — | — | `http://10.139.133.3:8001/hz_model_dpsk/v1` |
 | 凭据引用 | `DIZHI_API_KEY` | `HEZHI_API_KEY` | `HEZHI_DSV4_API_KEY` |
 | 输出限制字段 | `max_tokens` | `max_completion_tokens` | `max_tokens` |
-| 思考参数 | 未配置 | `chat_template_kwargs.enable_thinking` | 未配置 |
+| 思考参数 | `chat_template_kwargs.enable_thinking`（默认 `false`） | `chat_template_kwargs.enable_thinking` | 未配置 |
 | 输入声明 | 文本 | 文本、图片；视觉能力未实测 | 文本 |
 
 三条 route 均使用 `openai-completions` 和 Bearer 认证。地质不覆盖容量，继承官方适配器默认值，目前为 262144/32768 上下文/输出 token；SDK 可根据剩余上下文缩减输出额度。核智 Qwen 保留 32768/8192 token 的临时部署配置，dsv4 route 使用适配器回退容量。这些默认值和临时配置均不代表已验证的服务端限制。
@@ -69,6 +69,8 @@
 
 要让地质继承官方适配器默认值，需从 Profile 覆盖配置中的该模型删除原有临时 `contextWindow: 32768` 与 `maxTokens: 8192` 字段。不修改适配器常量或剩余上下文计算。日志中标记为适配器默认值的字段会在下次请求重新解析；显式 Agent 与 Session 输出设置仍优先。
 
+Qwen 还需同时合并下方 `compat.thinkingFormat: qwen-chat-template` 与模型的 `reasoningEfforts`。没有声明思考能力和请求格式时，仅设置 provider 的 `reasoning: 'off'` 不会发送关闭思考的参数。关闭时发送 `enable_thinking: false`，显式选择高时发送 `true`。网关和模型服务必须支持此 chat-template 参数；已有会话若显式开启了思考，需在该会话选择关闭。
+
 将下面不含密钥的示例合并到目标 Profile：
 
 ```yaml
@@ -87,10 +89,12 @@
           supportsReasoningEffort: false
           supportsUsageInStreaming: false
           maxTokensField: max_tokens
+          thinkingFormat: qwen-chat-template
         models:
           - id: gen-studio-Qwen3.6-27B-ygNP
             name: 地质科技 Qwen3.6-27B
             input: [text]
+            reasoningEfforts: { off: null, high: high }
       hezhi:
         displayName: 核智
         api: openai-completions
@@ -151,6 +155,8 @@ Test-NetConnection -ComputerName 10.139.133.3 -Port 8001
 ```
 
 用合成文本对话验证认证和流式回复，通过真实 Team 评审验证工具调用。图片、扫描页和电子表格渲染核读前须另测视觉能力；地质科技目前仅声明文本输入。未核验的文档部分保持 `UNVERIFIED`。
+
+将 Qwen 思考设为关闭，确认实际请求带有 `chat_template_kwargs.enable_thinking: false`，并通过 PPT 内容稿或 SVG 任务确认出现正文或工具操作。如果仍然只输出思考、没有正文和工具操作就达到输出上限，需先核验服务端是否执行该开关，再重试任务。仅新建会话不会改变 provider 配置。
 
 401/403 检查密钥和网关权限；404 检查 Base URL 前缀及模型 ID；参数错误检查各服务不同的输出限制字段。不要用公网服务回退掩盖内网失败。
 

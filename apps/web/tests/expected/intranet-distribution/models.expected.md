@@ -16,7 +16,11 @@
       - img "API key missing"
       - button "Edit 核智 (hezhi)": Edit
     - listitem:
-      - text: 地质科技 Custom
+      - text: 核智 DeepSeek Custom
       - img "API key missing"
+      - button "Edit 核智 DeepSeek (hezhi-dsv4)": Edit
+    - listitem:
+      - text: 地质科技 Custom
+      - img "API key configured"
       - button "Edit 地质科技 (dizhi)": Edit
   - button "Add model provider"

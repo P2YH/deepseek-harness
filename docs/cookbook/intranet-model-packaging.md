@@ -28,7 +28,7 @@ Use the Base URL below, without appending `/chat/completions` in configuration. 
 | Origin URL | — | — | `http://10.139.133.3:8001/hz_model_dpsk/v1` |
 | Credential reference | `DIZHI_API_KEY` | `HEZHI_API_KEY` | `HEZHI_DSV4_API_KEY` |
 | Output-limit field | `max_tokens` | `max_completion_tokens` | `max_tokens` |
-| Thinking parameter | Not configured | `chat_template_kwargs.enable_thinking` | Not configured |
+| Thinking parameter | `chat_template_kwargs.enable_thinking` (default `false`) | `chat_template_kwargs.enable_thinking` | Not configured |
 | Declared input | Text | Text and images; vision is not live-verified | Text |
 
 All three routes use `openai-completions` and Bearer authentication. Dizhi omits capacity overrides and inherits the official adapter defaults, currently 262144/32768 context/output tokens; the SDK may reduce the output allowance to fit the remaining context. Hezhi Qwen retains provisional deployment settings of 32768/8192 tokens. The dsv4 route uses the adapter fallback capacities. Neither these defaults nor the provisional settings establish server limits.
@@ -69,6 +69,8 @@ An overwrite installation does not reapply Profile seed. A Profile overriding th
 
 To inherit the official adapter defaults for Dizhi, remove the old provisional `contextWindow: 32768` and `maxTokens: 8192` fields from that model in any Profile override. Do not change the adapter constants or its remaining-context calculation. Logged adapter defaults are resolved again on the next request; explicit Agent and Session output settings remain authoritative.
 
+For Qwen, merge both `compat.thinkingFormat: qwen-chat-template` and the model's `reasoningEfforts` below. The provider's `reasoning: 'off'` alone does not send a thinking-disable parameter without the declared capability and wire dialect. Off sends `enable_thinking: false`; an explicit High selection sends `true`. The gateway and model service must honor this chat-template parameter. Select Off in existing conversations that explicitly enabled thinking.
+
 Merge this key-free example into the target Profile:
 
 ```yaml
@@ -87,10 +89,12 @@ Merge this key-free example into the target Profile:
           supportsReasoningEffort: false
           supportsUsageInStreaming: false
           maxTokensField: max_tokens
+          thinkingFormat: qwen-chat-template
         models:
           - id: gen-studio-Qwen3.6-27B-ygNP
             name: 地质科技 Qwen3.6-27B
             input: [text]
+            reasoningEfforts: { off: null, high: high }
       hezhi:
         displayName: 核智
         api: openai-completions
@@ -151,6 +155,8 @@ Test-NetConnection -ComputerName 10.139.133.3 -Port 8001
 ```
 
 Run a synthetic-text conversation to verify authentication and streaming. Validate tool calling through a real Team review. Validate vision separately before reviewing images, scanned pages or rendered spreadsheets; Dizhi currently declares text only. Unverified document portions remain `UNVERIFIED`.
+
+With Qwen thinking set to Off, verify that the outbound request contains `chat_template_kwargs.enable_thinking: false` and that a PPT content or SVG task produces text or tool actions. If a request still ends at its output limit with only reasoning and no text or tool actions, verify the server's handling of the toggle before repeating the task. A new conversation alone does not change the provider configuration.
 
 For 401/403, check keys and gateway permissions; for 404, check the Base URL prefix and model ID; for parameter errors, check the service-specific output-limit field. Do not fall back to a public service to conceal an intranet failure.
 

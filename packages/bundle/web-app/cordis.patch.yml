@@ -79,11 +79,13 @@
             supportsReasoningEffort: false,
             supportsUsageInStreaming: false,
             maxTokensField: 'max_tokens',
+            thinkingFormat: 'qwen-chat-template',
           },
           models: [{
             id: 'gen-studio-Qwen3.6-27B-ygNP',
             name: '地质科技 Qwen3.6-27B',
             input: ['text'],
+            reasoningEfforts: { off: null, high: 'high' },
           }],
         },
       } : {}

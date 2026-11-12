@@ -121,6 +121,7 @@ it('sends the Dizhi model and max_tokens to the prefixed Chat Completions endpoi
   expect(server.requests[0]).toMatchObject({ model: 'gen-studio-Qwen3.6-27B-ygNP', stream: true, max_tokens: 32 })
   expect(server.requests[0]).not.toHaveProperty('max_completion_tokens')
   expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
+  expect(server.requests[0]).toHaveProperty('chat_template_kwargs.enable_thinking', false)
   expect(server.paths).toEqual(['/openai/v1/chat/completions'])
   expect(server.headers[0]?.authorization).toBe('Bearer local-test-only')
 })
@@ -142,6 +143,31 @@ it('uses official adapter defaults for Dizhi without a deployment output cap', a
   const info = await ctx.llm.resolveModelInfo('dizhi', 'gen-studio-Qwen3.6-27B-ygNP')
   expect(info.context?.contextWindow).toBe(262144)
   expect(info.defaultMaxTokens).toBeUndefined()
+  expect(info.reasoning?.defaultEffort).toBe('off')
+  expect(info.reasoning?.efforts.map(effort => effort.id)).toEqual(['off', 'high'])
+})
+
+it('honors an explicit Dizhi thinking selection and sends a false toggle when disabled again', async () => {
+  vi.stubEnv('DIZHI_API_KEY', 'local-test-only')
+  const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+  const ctx = await composition('intranet')
+  const entry = ctx.loader.resolve('llm-pi-ai')
+  const raw = interpolate(entry.ctx, entry.options.config) as PiAi.Options
+  await entry.update({ config: { providers: { ...raw.providers,
+    dizhi: { ...raw.providers?.dizhi, baseURL: server.url + '/openai/v1' },
+  } } })
+  await ctx.loader.await()
+  for (const effort of ['high', 'off'] as const) {
+    const result = await assemble(ctx, { provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP',
+      reasoningEffort: ReasoningEffortId(effort),
+      messages: [createUserMessage({ content: [{ type: 'text', text: 'ping' }], source: { kind: 'user' } })] })
+    expect(result.finish).toEqual({ kind: 'stop' })
+  }
+  expect(server.requests).toMatchObject([
+    { chat_template_kwargs: { enable_thinking: true, preserve_thinking: true } },
+    { chat_template_kwargs: { enable_thinking: false, preserve_thinking: true } },
+  ])
+  for (const request of server.requests) expect(request).not.toHaveProperty('reasoning_effort')
 })
 
 it('retains a truncated Dizhi answer when continuing under official defaults', async () => {
