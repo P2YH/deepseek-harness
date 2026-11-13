@@ -21,7 +21,7 @@ afterEach(async () => {
 
 it('repairs all missing-credential routes through the real credential service and adapter, keeping saved keys first', async () => {
   const { root, profile, seed } = await setup()
-  const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }, { events: textEvents }])
+  const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }])
   const boot = async (dotenv: string) => {
     const ctx = new Context()
     const values = Object.fromEntries(Object.entries(parseEnv(dotenv))
@@ -32,8 +32,6 @@ it('repairs all missing-credential routes through the real credential service an
     await ctx.plugin(PiAi, { providers: {
       dizhi: { api: 'openai-completions', baseURL: server.url + '/v1', apiKeyEnv: 'DIZHI_API_KEY',
         models: [{ id: 'gen-studio-Qwen3.6-27B-ygNP', contextWindow: 32768, maxTokens: 8192 }] },
-      hezhi: { api: 'openai-completions', baseURL: server.url + '/v1', apiKeyEnv: 'HEZHI_API_KEY',
-        models: [{ id: 'Qwen3.6-27B', contextWindow: 32768, maxTokens: 8192 }] },
       'hezhi-dsv4': { api: 'openai-completions', baseURL: server.url + '/v1', apiKeyEnv: 'HEZHI_DSV4_API_KEY',
         models: [{ id: 'dsv4' }] },
     } })
@@ -41,7 +39,7 @@ it('repairs all missing-credential routes through the real credential service an
   }
   const missing = await boot('')
   try {
-    for (const [provider, model] of [['dizhi', 'gen-studio-Qwen3.6-27B-ygNP'], ['hezhi', 'Qwen3.6-27B'], ['hezhi-dsv4', 'dsv4']] as const) {
+    for (const [provider, model] of [['dizhi', 'gen-studio-Qwen3.6-27B-ygNP'], ['hezhi-dsv4', 'dsv4']] as const) {
       expect((await assemble(missing, { provider, model, messages: [] })).finish)
         .toMatchObject({ kind: 'error', failure: { code: 'MISSING_CREDENTIAL' } })
     }
@@ -50,7 +48,7 @@ it('repairs all missing-credential routes through the real credential service an
   await seedIntranetModelCredentials(profile, seed)
   const ready = await boot(await readFile(join(profile, '.env'), 'utf8'))
   try {
-    for (const [provider, model, expected] of [['dizhi', 'gen-studio-Qwen3.6-27B-ygNP', 'test-dizhi'], ['hezhi', 'Qwen3.6-27B', 'test-hezhi'], ['hezhi-dsv4', 'dsv4', 'test-dsv4']] as const) {
+    for (const [provider, model, expected] of [['dizhi', 'gen-studio-Qwen3.6-27B-ygNP', 'test-dizhi'], ['hezhi-dsv4', 'dsv4', 'test-dsv4']] as const) {
       expect((await assemble(ready, { provider, model, messages: [] })).message.content).toEqual([{ type: 'text', text: 'hello' }])
       expect(server.headers.at(-1)?.authorization).toBe(`Bearer ${expected}`)
     }
@@ -67,7 +65,7 @@ async function setup() {
   const root = await mkdtemp(join(tmpdir(), 'dsh-intranet-keys-'))
   roots.push(root)
   const seed = join(root, 'seed.json')
-  await writeFile(seed, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'test-hezhi', HEZHI_DSV4_API_KEY: 'test-dsv4' } }))
+  await writeFile(seed, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_DSV4_API_KEY: 'test-dsv4' } }))
   return { root, seed, profile: join(root, 'profile') }
 }
 
@@ -75,19 +73,26 @@ it('makes all deployment credentials available through the profile dotenv on a f
   const { profile, seed } = await setup()
   await seedIntranetModelCredentials(profile, seed)
   expect(parseEnv(await readFile(join(profile, '.env'), 'utf8'))).toEqual({
-    DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'test-hezhi', HEZHI_DSV4_API_KEY: 'test-dsv4',
+    DIZHI_API_KEY: 'test-dizhi', HEZHI_DSV4_API_KEY: 'test-dsv4',
   })
+})
+
+it('accepts a legacy deployment file without provisioning its retired key', async () => {
+  const { profile, seed } = await setup()
+  await writeFile(seed, JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-dizhi', HEZHI_API_KEY: 'old-key', HEZHI_DSV4_API_KEY: 'test-dsv4' } }))
+  await seedIntranetModelCredentials(profile, seed)
+  expect(parseEnv(await readFile(join(profile, '.env'), 'utf8'))).toEqual({ DIZHI_API_KEY: 'test-dizhi', HEZHI_DSV4_API_KEY: 'test-dsv4' })
 })
 
 it('preserves existing values and comments, fills missing or blank keys, and is idempotent', async () => {
   const { profile, seed } = await setup()
   await seedIntranetModelCredentials(profile, seed)
-  const existing = '# target configuration\r\nDIZHI_API_KEY=target-key\r\nHEZHI_API_KEY=\r\nOTHER=keep'
+  const existing = '# target configuration\r\nDIZHI_API_KEY=target-key\r\nOTHER=keep'
   await writeFile(join(profile, '.env'), existing)
   await seedIntranetModelCredentials(profile, seed)
   const first = await readFile(join(profile, '.env'), 'utf8')
   expect(first.startsWith(existing)).toBe(true)
-  expect(parseEnv(first)).toEqual({ DIZHI_API_KEY: 'target-key', HEZHI_API_KEY: 'test-hezhi', HEZHI_DSV4_API_KEY: 'test-dsv4', OTHER: 'keep' })
+  expect(parseEnv(first)).toEqual({ DIZHI_API_KEY: 'target-key', HEZHI_DSV4_API_KEY: 'test-dsv4', OTHER: 'keep' })
   await seedIntranetModelCredentials(profile, seed)
   expect(await readFile(join(profile, '.env'), 'utf8')).toBe(first)
 })
@@ -97,14 +102,13 @@ it('serializes concurrent first launches without losing or duplicating keys', as
   await Promise.all([seedIntranetModelCredentials(profile, seed), seedIntranetModelCredentials(profile, seed)])
   const raw = await readFile(join(profile, '.env'), 'utf8')
   expect(raw.match(/DIZHI_API_KEY=/gu)).toHaveLength(1)
-  expect(raw.match(/HEZHI_API_KEY=/gu)).toHaveLength(1)
   expect(raw.match(/HEZHI_DSV4_API_KEY=/gu)).toHaveLength(1)
 })
 
 it('refuses malformed or incomplete seed files without including secret text in errors', async () => {
   const { profile, seed } = await setup()
   for (const raw of ['{"test-secret":', JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret' } }),
-    JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret\nunsafe', HEZHI_API_KEY: 'test', HEZHI_DSV4_API_KEY: 'test' } })]) {
+    JSON.stringify({ version: 1, refs: { DIZHI_API_KEY: 'test-secret\nunsafe', HEZHI_DSV4_API_KEY: 'test' } })]) {
     await writeFile(seed, raw)
     await expect(seedIntranetModelCredentials(profile, seed)).rejects.toThrow(/^desktop intranet credentials: invalid deployment file$/u)
   }

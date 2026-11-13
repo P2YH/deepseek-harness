@@ -4,7 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader, { interpolate } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches } from '@deepseek-ai/cordis-plugin-include'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
-import Llm, { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
+import Llm, { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import DefaultModel from '@deepseek-ai/dsh-agent-default-model'
 import * as PiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
@@ -33,8 +33,7 @@ async function composition(mode: 'standard' | 'intranet'): Promise<Context> {
   return ctx
 }
 
-it('offers the Hezhi default only in intranet mode and keeps it editable', async () => {
-  vi.stubEnv('HEZHI_API_KEY','local-test-only')
+it('offers the intranet model catalog only in intranet mode and keeps it editable', async () => {
   vi.stubEnv('HEZHI_DSV4_API_KEY','local-test-only')
   vi.stubEnv('DIZHI_API_KEY','local-test-only')
   const standard = await composition('standard')
@@ -42,15 +41,12 @@ it('offers the Hezhi default only in intranet mode and keeps it editable', async
   expect(standard.agentDefaultModel.currentSelection()).toEqual({ provider: 'deepseek-official', model: 'deepseek-flash' })
   const intranet = await composition('intranet')
   expect(intranet.agentDefaultModel.currentSelection()).toEqual({ provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP' })
-  expect(intranet.llm.listProviders()).toContainEqual(expect.objectContaining({ id: 'hezhi', name: '核智' }))
-  expect(await intranet.llm.listModels('hezhi')).toContainEqual(expect.objectContaining({ id: 'Qwen3.6-27B' }))
   const entry = intranet.loader.resolve('llm-pi-ai')
   const raw = interpolate(entry.ctx, entry.options.config) as PiAi.Options
-  expect(raw.providers?.hezhi?.baseURL).toBe('http://10.139.133.3:8001/v1')
-  expect(raw.providers?.hezhi?.apiKeyEnv).toBe('HEZHI_API_KEY')
+  expect(raw.providers?.hezhi).toBeUndefined()
   expect(intranet.llm.listProviders()).toContainEqual(expect.objectContaining({ id: 'hezhi-dsv4', name: '核智 DeepSeek' }))
   expect(await intranet.llm.listModels('hezhi-dsv4')).toContainEqual(expect.objectContaining({ id: 'dsv4', name: 'deepseek-v4-flash' }))
-  expect(raw.providers?.['hezhi-dsv4']?.baseURL).toBe('http://cori.cnnc.cn/hz/hz_model_dpsk/v1')
+  expect(raw.providers?.['hezhi-dsv4']?.baseURL).toBe('http://10.139.133.3:8001/hz_model_dpsk/v1')
   expect(raw.providers?.['hezhi-dsv4']?.apiKeyEnv).toBe('HEZHI_DSV4_API_KEY')
   expect(intranet.llm.listProviders()).toContainEqual(expect.objectContaining({ id: 'dizhi', name: '地质科技' }))
   expect(await intranet.llm.listModels('dizhi')).toContainEqual(expect.objectContaining({ id: 'gen-studio-Qwen3.6-27B-ygNP' }))
@@ -61,7 +57,7 @@ it('offers the Hezhi default only in intranet mode and keeps it editable', async
   expect(intranet.agentDefaultModel.currentSelection()).toEqual({ provider: 'custom', model: 'existing' })
 })
 
-it('routes the built-in dsv4 model through the public Hezhi proxy', async () => {
+it('routes the built-in dsv4 model through the Hezhi endpoint', async () => {
   vi.stubEnv('HEZHI_DSV4_API_KEY', 'local-test-only')
   const server = await mockServer([{ events: textEvents }])
   const ctx = await composition('intranet')
@@ -77,29 +73,6 @@ it('routes the built-in dsv4 model through the public Hezhi proxy', async () => 
   expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
   expect(server.requests[0]).toMatchObject({ model: 'dsv4', stream: true, max_tokens: 32768 })
   expect(server.paths).toEqual(['/hz_model_dpsk/v1/chat/completions'])
-  expect(server.headers[0]?.authorization).toBe('Bearer local-test-only')
-})
-
-it('sends Bearer authentication, system messages and template thinking flags through the real adapter', async () => {
-  vi.stubEnv('HEZHI_API_KEY', 'local-test-only')
-  const server = await mockServer([{ events: textEvents }, { events: textEvents }])
-  const ctx = await composition('intranet')
-  const entry = ctx.loader.resolve('llm-pi-ai')
-  const raw = interpolate(entry.ctx, entry.options.config) as PiAi.Options
-  await entry.update({ config: { providers: { hezhi: { ...raw.providers?.hezhi, baseURL: server.url + '/v1' } } } })
-  await ctx.loader.await()
-  for (const [effort, enabled] of [['off', false], ['high', true]] as const) {
-    const result = await assemble(ctx, { provider: 'hezhi', model: 'Qwen3.6-27B',
-      system: 'local test', reasoningEffort: ReasoningEffortId(effort), maxTokens: 32,
-      messages: [createUserMessage({ content: [{ type: 'text', text: 'ping' }], source: { kind: 'user' } })] })
-    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
-    expect(server.requests.at(-1)).toMatchObject({ model: 'Qwen3.6-27B', stream: true,
-      max_completion_tokens: 32, chat_template_kwargs: { enable_thinking: enabled },
-      messages: [{ role: 'system' }, { role: 'user' }] })
-    expect(server.requests.at(-1)).not.toHaveProperty('store')
-    expect(server.requests.at(-1)).not.toHaveProperty('reasoning_effort')
-  }
-  expect(server.paths).toEqual(['/v1/chat/completions', '/v1/chat/completions'])
   expect(server.headers[0]?.authorization).toBe('Bearer local-test-only')
 })
 

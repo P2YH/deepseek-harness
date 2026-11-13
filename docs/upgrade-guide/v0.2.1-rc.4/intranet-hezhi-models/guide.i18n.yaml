@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.4/intranet-hezhi-models/guide.md
+/:
+  en: 914b641ae007ac6d
+  zh: a7e77aeff98482af
+/intranet-hezhi-model-configuration:
+  en: 868dd747f87e51f8
+  zh: e54905c43e53f04e
+/intranet-hezhi-model-configuration/change:
+  en: 655f70bef18015a8
+  zh: 9929b9d2e4cacfdf
+/intranet-hezhi-model-configuration/migration:
+  en: a669d9b651fa8dbd
+  zh: a36b8e89189892c6

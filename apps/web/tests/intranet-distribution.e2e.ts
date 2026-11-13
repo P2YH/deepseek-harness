@@ -33,7 +33,7 @@ describe('web e2e: intranet distribution', () => {
 
   it('opens a workspace with the intranet default and no official onboarding', async () => {
     expect(scaffold.ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'dizhi', model: 'gen-studio-Qwen3.6-27B-ygNP' })
-    expect(scaffold.ctx.llm.listProviders()).toEqual([{ id: 'hezhi', name: '核智' }, { id: 'hezhi-dsv4', name: '核智 DeepSeek' }, { id: 'dizhi', name: '地质科技' }])
+    expect(scaffold.ctx.llm.listProviders()).toEqual([{ id: 'hezhi-dsv4', name: '核智 DeepSeek' }, { id: 'dizhi', name: '地质科技' }])
     expect(await page.getByRole('dialog').count()).toBe(0)
     expect(await page.locator('[data-composer-input]').first().getAttribute('contenteditable')).toBe('true')
     await page.getByRole('button', { name: 'Settings', exact: true }).click()

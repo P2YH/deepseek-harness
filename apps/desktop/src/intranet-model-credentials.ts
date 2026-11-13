@@ -4,14 +4,14 @@ import { join } from 'node:path'
 import { parseEnv } from 'node:util'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
-const REFERENCES = ['DIZHI_API_KEY', 'HEZHI_API_KEY', 'HEZHI_DSV4_API_KEY'] as const
+const REFERENCES = ['DIZHI_API_KEY', 'HEZHI_DSV4_API_KEY'] as const
 
 /**
  * Fill missing home dotenv keys from an explicitly bundled deployment file.
  * Managed credentials and inherited environment retain their existing precedence.
  * The caller selects the file only for a packaged intranet application.
  * @param home - Harness home shared by Desktop and its Host.
- * @param seedPath - Private deployment JSON containing only the three model keys.
+ * @param seedPath - Private deployment JSON containing only the two model keys.
  * @returns After the locked, atomic dotenv write; repeated calls preserve existing values.
  */
 export async function seedIntranetModelCredentials(home: string, seedPath: string): Promise<void> {
@@ -21,8 +21,9 @@ export async function seedIntranetModelCredentials(home: string, seedPath: strin
     if (typeof value !== 'object' || value === null || Object.keys(value).length !== 2 || !('version' in value) || value.version !== 1
       || !('refs' in value) || typeof value.refs !== 'object' || value.refs === null || Array.isArray(value.refs)) throw Error()
     refs = value.refs as Record<string, unknown>
-    if (Object.keys(refs).length !== REFERENCES.length || REFERENCES.some(ref => typeof refs[ref] !== 'string'
-      || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs[ref]))) throw Error()
+    if (Object.keys(refs).some(ref => ![...REFERENCES, 'HEZHI_API_KEY'].includes(ref as typeof REFERENCES[number] | 'HEZHI_API_KEY'))
+      || REFERENCES.some(ref => typeof refs[ref] !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs[ref]))
+      || ('HEZHI_API_KEY' in refs && (typeof refs.HEZHI_API_KEY !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs.HEZHI_API_KEY)))) throw Error()
   } catch {
     // JSON parser errors can contain the credential-bearing source line.
     throw new Error('desktop intranet credentials: invalid deployment file')

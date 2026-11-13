@@ -17,9 +17,10 @@ export function resolveIntranetModelKeysFile(environment) {
     const value = JSON.parse(readFileSync(path, 'utf8'))
     const refs = value?.refs
     if (value?.version !== 1 || Object.keys(value).length !== 2 || refs === null || typeof refs !== 'object' || Array.isArray(refs)
-      || Object.keys(refs).length !== 3
-      || ['DIZHI_API_KEY', 'HEZHI_API_KEY', 'HEZHI_DSV4_API_KEY'].some(ref => typeof refs[ref] !== 'string'
-        || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs[ref]))) throw Error()
+      || Object.keys(refs).some(ref => !['DIZHI_API_KEY', 'HEZHI_DSV4_API_KEY', 'HEZHI_API_KEY'].includes(ref))
+      || ['DIZHI_API_KEY', 'HEZHI_DSV4_API_KEY'].some(ref => typeof refs[ref] !== 'string'
+        || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs[ref]))
+      || ('HEZHI_API_KEY' in refs && (typeof refs.HEZHI_API_KEY !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/u.test(refs.HEZHI_API_KEY)))) throw Error()
   } catch {
     throw new Error('desktop package: invalid intranet model deployment file')
   }

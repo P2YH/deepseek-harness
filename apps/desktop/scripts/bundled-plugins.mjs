@@ -13,15 +13,19 @@ export function resolveBundledPluginsDirectory(environment) {
   if (!directory) return undefined
   if (resolveDesktopDistributionMode(environment) !== 'intranet') throw new Error('desktop package: bundled plugins require intranet mode')
   const inventory = JSON.parse(readFileSync(join(directory, 'plugins.json'), 'utf8'))
-  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || inventory.plugins.length < 2 || inventory.plugins.length > 9
+  if (inventory.schemaVersion !== 1 || !Array.isArray(inventory.plugins) || inventory.plugins.length < 2 || inventory.plugins.length > 10
     || new Set(inventory.plugins.map(plugin => plugin.name)).size !== inventory.plugins.length
     || inventory.plugins.some(plugin => !['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', 'dsh-plugin-easyview', 'dsh-plugin-tasks',
-      'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor', 'dsh-pet'].includes(plugin.name))
+      'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor', 'dsh-plugin-ppt', 'dsh-pet'].includes(plugin.name))
     || !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-architecture-review')
     || !inventory.plugins.some(plugin => ['dsh-plugin-office-agents', 'dsh-plugin-easyview'].includes(plugin.name))
     || (inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-office-agents')
       && !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-tasks'))) {
     throw new Error('desktop package: architecture review, a supported document workbench, and tasks when Office Agents is bundled are required')
+  }
+  if (inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-ppt')
+    && !inventory.plugins.some(plugin => plugin.name === 'dsh-plugin-presentation-editor')) {
+    throw new Error('desktop package: PPT expert requires the presentation editor')
   }
   for (const plugin of inventory.plugins) {
     if (!statSync(join(directory, plugin.name, 'plugin.tgz')).isFile()

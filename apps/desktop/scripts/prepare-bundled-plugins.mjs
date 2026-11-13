@@ -61,11 +61,14 @@ for (const archive of archiveInputs) {
 }
 if (!archives.has('dsh-plugin-architecture-review')) throw new Error('Bundled plugin preparation requires dsh-plugin-architecture-review')
 const supported = ['dsh-plugin-architecture-review', 'dsh-plugin-office-agents', 'dsh-plugin-easyview', 'dsh-plugin-tasks',
-  'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor']
+  'dsh-plugin-document-editor', 'dsh-plugin-pdf-editor', 'dsh-plugin-presentation-editor', 'dsh-plugin-spreadsheet-editor', 'dsh-plugin-ppt']
 if ([...archives.keys()].some(name => !supported.includes(name))) throw new Error('Unsupported bundled plugin archive')
 if (!archives.has('dsh-plugin-easyview') && !archives.has('dsh-plugin-office-agents')) throw new Error('Bundled plugin preparation requires dsh-plugin-easyview or dsh-plugin-office-agents')
 if (archives.has('dsh-plugin-office-agents') && !archives.has('dsh-plugin-tasks')) {
   throw new Error('Bundled plugin preparation requires dsh-plugin-tasks when dsh-plugin-office-agents is bundled')
+}
+if (archives.has('dsh-plugin-ppt') && !archives.has('dsh-plugin-presentation-editor')) {
+  throw new Error('Bundled PPT expert requires dsh-plugin-presentation-editor for native editing')
 }
 for (const name of supported) {
   if (archives.has(name)) addPlugin(name, archives.get(name))

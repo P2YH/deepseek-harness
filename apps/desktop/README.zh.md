@@ -38,7 +38,7 @@ Windows 内网包不嵌入更新源或强制更新策略，不要求更新服务
 
 地质科技和核智（含 DeepSeek V4 路由）的内网端点、可选的免填写部署密钥、默认选择及覆盖升级，见[内网模型打包与配置](../../docs/cookbook/intranet-model-packaging.zh.md)。
 
-Windows 内网包可在 `.env.windows` 中配置 `DSH_DESKTOP_BUNDLED_PLUGINS_DIR`，内置办公平台及架构评审。使用两个包含完整依赖的离线归档执行 `node scripts/prepare-bundled-plugins.mjs <新目录> <office.tgz> <review.tgz>`，生成资源目录；清单对两个发行插件设置 `updateExisting: true`。启动 Host 前，Desktop 核对归档及解压文件的记录哈希，安装缺失插件，并在所选归档或模块投影不同时替换已有发行插件，包括开发版本号相同的情况。更新保留启停选择，将被替换模块和 Profile 元数据备份到 `profiles/desktop/.desktop-plugin-backups`；提交失败时恢复原模块投影和元数据。此前已移除的插件保持移除。清单省略 `updateExisting` 时保留已有插件版本。安装过程不修改模型选择、其他插件、工作区、会话或业务文件。是否安装由包内 manifest 决定，运行时环境变量不能开启此行为。
+Windows 内网包可在 `.env.windows` 中配置 `DSH_DESKTOP_BUNDLED_PLUGINS_DIR`，内置办公平台及架构评审。使用两个包含完整依赖的离线归档执行 `node scripts/prepare-bundled-plugins.mjs <新目录> <office.tgz> <review.tgz>`，生成资源目录；清单对两个发行插件设置 `updateExisting: true`。启动 Host 前，Desktop 核对归档及解压文件的记录哈希，安装缺失插件，并在所选归档或模块投影不同时替换已有发行插件，包括开发版本号相同的情况。更新保留启停选择，将被替换模块和 Profile 元数据备份到 `profiles/desktop/.desktop-plugin-backups`；提交失败时恢复原模块投影和元数据。此前已移除的插件保持移除。清单省略 `updateExisting` 时保留已有插件版本。安装过程不修改模型选择、其他插件、工作区、会话或业务文件。是否安装由包内 manifest 决定，运行时环境变量不能开启此行为。 部署包含 `dsh-plugin-ppt` 时，必须同时提供 `dsh-plugin-presentation-editor`；资源准备和打包会拒绝缺少编辑器的组合。
 
 桌面埋点遵循[产品采集策略](../../packages/client/product-analytics/README.zh.md)及其动态应用配置，不包含 Web 使用情况。安装更新会等待该操作的本地埋点接收请求结束，再锁定 API 准入并停止 Host。接收请求的时限为一秒，失败不会阻止安装，也不等待收集端完成发送。
 
