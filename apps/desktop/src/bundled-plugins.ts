@@ -4,6 +4,7 @@ import * as nodeFs from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { readProfileManifest } from '@deepseek-ai/dsh-app-boot'
+import { extract as extractTar } from 'tar'
 
 // Provision physical archives as bytes; Electron's node:fs treats .asar paths as virtual directories.
 const { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync }
@@ -13,6 +14,7 @@ interface BundledPlugin {
   readonly name: string
   readonly version: string
   readonly sha256: string
+  readonly archiveOnly: boolean
   readonly updateExisting?: boolean
   readonly files: readonly { readonly path: string; readonly sha256: string }[]
   readonly electronFiles?: readonly { readonly path: string; readonly sha256: string }[]
@@ -36,7 +38,7 @@ interface PluginUpdate {
  */
 export function readBundledPlugins(directory: string): readonly BundledPlugin[] {
   const value: unknown = JSON.parse(readFileSync(join(directory, 'plugins.json'), 'utf8'))
-  if (typeof value !== 'object' || value === null || !('schemaVersion' in value) || value.schemaVersion !== 1
+  if (typeof value !== 'object' || value === null || !('schemaVersion' in value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)
     || !('plugins' in value) || !Array.isArray(value.plugins) || value.plugins.length === 0) {
     throw new Error('desktop bundled plugins: invalid inventory')
   }
@@ -67,7 +69,7 @@ export function readBundledPlugins(directory: string): readonly BundledPlugin[] 
     if (entry.name === 'dsh-pet' ? !electronFiles?.some(file => file.path === 'electron.exe') : electronFiles !== undefined) {
       throw new Error('desktop bundled plugins: invalid pet Electron inventory')
     }
-    return { name: entry.name, version: entry.version, sha256: entry.sha256, files,
+    return { name: entry.name, version: entry.version, sha256: entry.sha256, files, archiveOnly: value.schemaVersion === 2,
       ...electronFiles === undefined ? {} : { electronFiles },
       ...'updateExisting' in entry ? { updateExisting: entry.updateExisting as boolean } : {} }
   })
@@ -79,9 +81,15 @@ function writeJson(path: string, value: unknown): void {
   renameSync(temporary, path)
 }
 
+function verifyArchive(source: string, plugin: BundledPlugin): void {
+  if (createHash('sha256').update(readFileSync(join(source, 'plugin.tgz'))).digest('hex') !== plugin.sha256) {
+    throw new Error(`desktop bundled plugins: archive mismatch for ${plugin.name}`)
+  }
+}
+
 function verifyPlugin(source: string, plugin: BundledPlugin): void {
   const digest = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex')
-  if (digest(join(source, 'plugin.tgz')) !== plugin.sha256) throw new Error(`desktop bundled plugins: archive mismatch for ${plugin.name}`)
+  verifyArchive(source, plugin)
   for (const file of plugin.files) {
     if (digest(join(source, 'package', ...file.path.split('/'))) !== file.sha256) {
       throw new Error(`desktop bundled plugins: file mismatch for ${plugin.name}/${file.path}`)
@@ -89,6 +97,23 @@ function verifyPlugin(source: string, plugin: BundledPlugin): void {
   }
   const published = JSON.parse(readFileSync(join(source, 'package/package.json'), 'utf8')) as { name: string; version: string }
   if (published.name !== plugin.name || published.version !== plugin.version) throw new Error('desktop bundled plugins: package identity mismatch')
+}
+
+function unpackPlugin(directory: string, plugin: BundledPlugin): void {
+  const files = new Set(plugin.files.map(file => `package/${file.path}`))
+  const extracted = new Set<string>()
+  extractTar({ file: join(directory, 'plugin.tgz'), cwd: directory, sync: true, strict: true, filter: (path, entry) => {
+    const name = path.replace(/\/$/u, '')
+    const parts = name.split('/')
+    const type = 'type' in entry ? entry.type : undefined
+    if (type === 'Directory' && parts[0] === 'package' && !name.includes('\\') && !name.includes(':')
+      && parts.every(part => part !== '' && part !== '.' && part !== '..')) return true
+    if (type !== 'File' || !files.has(name) || extracted.has(name)) {
+      throw new Error(`desktop bundled plugins: unexpected archive entry for ${plugin.name}/${path}`)
+    }
+    extracted.add(name)
+    return true
+  } })
 }
 
 function verifyElectron(directory: string, files: NonNullable<BundledPlugin['electronFiles']>): void {
@@ -118,12 +143,16 @@ function seedPetElectron(home: string, directory: string, plugin: BundledPlugin)
 }
 
 /**
- * Verify archives, extracted plugins and the optional pet runtime after installer assembly.
+ * Verify archives, legacy extracted plugins and the optional pet runtime after installer assembly.
  * @param directory - Physical resources copied by Electron Builder.
  */
 export function verifyBundledPlugins(directory: string): void {
   for (const plugin of readBundledPlugins(directory)) {
-    verifyPlugin(join(directory, plugin.name), plugin)
+    const source = join(directory, plugin.name)
+    if (plugin.archiveOnly) {
+      verifyArchive(source, plugin)
+      if (pathExists(join(source, 'package'))) throw new Error(`desktop bundled plugins: duplicate extracted package for ${plugin.name}`)
+    } else verifyPlugin(source, plugin)
     verifyElectron(join(directory, plugin.name, 'electron'), plugin.electronFiles ?? [])
   }
 }
@@ -137,8 +166,10 @@ function pathExists(path: string): boolean {
  * Install missing bundles and apply explicitly selected updates under the caller's profile lock.
  * Updates back up installed plugins and profile metadata; activation and prior removal choices survive.
  * Without updateExisting, existing dependencies remain unchanged. Failed commits restore prior projections and metadata.
+ * Archive-only resources are extracted and verified in a temporary profile directory before publication.
+ * Extraction failure removes that temporary directory and leaves installed plugins and metadata unchanged.
  * @param profile - Initialized external Desktop profile.
- * @param directory - Physical packaged trees and their self-contained npm archives.
+ * @param directory - Physical self-contained npm archives, or legacy archives with extracted trees.
  * @param home - Harness home containing the pet's shared Electron runtime.
  */
 export function seedBundledPlugins(profile: string, directory: string, home: string): void {
@@ -183,9 +214,17 @@ export function seedBundledPlugins(profile: string, directory: string, home: str
       mkdirSync(join(profile, '.desktop-bundles'), { recursive: true })
       const stage = `${plan.owned}.${randomUUID()}.tmp`
       const source = join(directory, plan.plugin.name)
-      cpSync(source, stage, { recursive: true, filter: path => path !== join(source, 'electron') })
-      verifyPlugin(stage, plan.plugin)
-      renameSync(stage, plan.owned)
+      try {
+        cpSync(source, stage, { recursive: true, filter: path => path !== join(source, 'electron') })
+        if (plan.plugin.archiveOnly) {
+          verifyArchive(stage, plan.plugin)
+          unpackPlugin(stage, plan.plugin)
+        }
+        verifyPlugin(stage, plan.plugin)
+        renameSync(stage, plan.owned)
+      } finally {
+        rmSync(stage, { recursive: true, force: true })
+      }
     } else verifyPlugin(plan.owned, plan.plugin)
   }
   const originalManifest = readFileSync(manifestPath)

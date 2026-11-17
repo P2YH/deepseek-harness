@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
+import { create as createTar } from 'tar'
 import { DesktopProjectManager } from '../src/project-manager.ts'
 import { resolveDesktopPaths } from '../src/paths.ts'
 import { runtimeFixture } from './runtime-fixture.ts'
@@ -20,13 +21,13 @@ vi.mock('node:fs', async (importOriginal) => {
   } }
 })
 afterEach(() => { failure.receipt = false; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
-function setup() {
+function setup(includeTasks = false) {
   const root = mkdtempSync(join(tmpdir(), 'dsh-bundled-plugins-'))
   roots.push(root)
   const resources = join(root, 'resources')
   const dsh = join(root, 'runtime')
   runtimeFixture(dsh)
-  const plugins = ['dsh-plugin-office-agents', 'dsh-plugin-architecture-review'].map((name) => {
+  const plugins = ['dsh-plugin-office-agents', 'dsh-plugin-architecture-review', ...(includeTasks ? ['dsh-plugin-tasks'] : [])].map((name) => {
     const directory = join(resources, name)
     mkdirSync(join(directory, 'package/lib'), { recursive: true })
     writeFileSync(join(directory, 'plugin.tgz'), name)
@@ -59,6 +60,55 @@ function enableBundledUpgrades(resources: string): void {
   writeFileSync(file, JSON.stringify(inventory))
 }
 
+function archiveOnlyResources(resources: string): void {
+  const file = join(resources, 'plugins.json')
+  const inventory = JSON.parse(readFileSync(file, 'utf8')) as {
+    schemaVersion: number
+    plugins: { name: string; sha256: string; updateExisting?: boolean }[]
+  }
+  inventory.schemaVersion = 2
+  for (const plugin of inventory.plugins) {
+    const directory = join(resources, plugin.name)
+    const archive = join(directory, 'plugin.tgz')
+    createTar({ cwd: directory, file: archive, gzip: true, sync: true }, ['package'])
+    plugin.sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex')
+    plugin.updateExisting = true
+    rmSync(join(directory, 'package'), { recursive: true })
+  }
+  writeFileSync(file, JSON.stringify(inventory))
+}
+
+it('provisions archive-only resources and reuses their verified installation', async () => {
+  const { resources, manager, manifest } = setup()
+  archiveOnlyResources(resources)
+  verifyBundledPlugins(resources)
+  await manager.applyRelease()
+  const installed = manifest()
+  expect(installed.dependencies['dsh-plugin-office-agents']).toMatch(/^file:\.\/\.desktop-bundles\//u)
+  expect(readFileSync(join(manager.paths.profile, 'node_modules/dsh-plugin-office-agents/lib/index.js'), 'utf8')).toBe('export const name = "plugin"\n')
+  expect(existsSync(join(resources, 'dsh-plugin-office-agents/package'))).toBe(false)
+  await manager.applyRelease()
+  expect(manifest()).toEqual(installed)
+  expect(readdirSync(join(manager.paths.profile, '.desktop-bundles')).some(name => name.endsWith('.tmp'))).toBe(false)
+})
+
+it.each(['changed file', 'extra file'])('retains the installed profile after archive extraction rejects %s', async (damage) => {
+  const { resources, manager } = setup()
+  await manager.applyRelease()
+  const manifestPath = join(manager.paths.profile, 'package.json')
+  const originalManifest = readFileSync(manifestPath)
+  const installedPath = join(manager.paths.profile, 'node_modules/dsh-plugin-office-agents/lib/index.js')
+  const originalPlugin = readFileSync(installedPath)
+  const packageRoot = join(resources, 'dsh-plugin-office-agents/package')
+  writeFileSync(join(packageRoot, damage === 'changed file' ? 'lib/index.js' : 'unexpected.js'), 'damaged')
+  archiveOnlyResources(resources)
+  await expect(manager.applyRelease()).rejects.toThrow(damage === 'changed file' ? /file mismatch/u : /unexpected archive entry/u)
+  expect(readFileSync(manifestPath)).toEqual(originalManifest)
+  expect(readFileSync(installedPath)).toEqual(originalPlugin)
+  expect(existsSync(manager.paths.lock)).toBe(false)
+  expect(readdirSync(join(manager.paths.profile, '.desktop-bundles')).some(name => name.endsWith('.tmp'))).toBe(false)
+})
+
 function addPet(resources: string): void {
   const directory = join(resources, 'dsh-pet')
   mkdirSync(join(directory, 'package/lib'), { recursive: true })
@@ -85,7 +135,7 @@ function addPet(resources: string): void {
 }
 
 it('installs and enables the offline pet with its complete runtime, retaining user settings and later removal', async () => {
-  const { resources, manager, manifest } = setup()
+  const { resources, manager, manifest } = setup(true)
   addPet(resources)
   verifyBundledPlugins(resources)
   expect(createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_BUNDLED_PLUGINS_DIR: resources }, 'win32', 'x64').extraMetadata.dshBundledPlugins).toBe(true)
@@ -292,7 +342,7 @@ it('accepts an existing profile that has bundles and no dependencies field', asy
 })
 
 it('ships only explicitly configured intranet resources and resolves file-owned paths', () => {
-  const { root, resources } = setup()
+  const { root, resources } = setup(true)
   const env = { DSH_DESKTOP_APP_ID: 'com.example.intranet', DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_UNSIGNED: '1', DSH_DESKTOP_BUNDLED_PLUGINS_DIR: resources }
   const config = createElectronBuilderConfig(env, 'win32', 'x64')
   expect(config.extraMetadata.dshBundledPlugins).toBe(true)

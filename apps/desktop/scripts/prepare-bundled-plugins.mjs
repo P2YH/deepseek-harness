@@ -1,4 +1,4 @@
-/** Materialize verified offline plugin archives and an optional pet ZIP as installer resources. */
+/** Stage verified offline plugin archives and an optional pet Electron runtime as installer resources. */
 import { createHash } from 'node:crypto'
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -46,6 +46,7 @@ function addPlugin(name, archive) {
   const manifest = JSON.parse(readFileSync(join(target, 'package/package.json'), 'utf8'))
   if (manifest.name !== name || !manifest.dsh?.bundle?.patch) throw new Error(`Invalid plugin manifest: ${name}`)
   const plugin = { name, version: manifest.version, sha256: hash(readFileSync(archive)), updateExisting: true, files: filesIn(join(target, 'package')) }
+  rmSync(join(target, 'package'), { recursive: true })
   plugins.push(plugin)
   return plugin
 }
@@ -95,7 +96,7 @@ if (petZip) {
     rmSync(temporary, { recursive: true, force: true })
   }
 }
-writeFileSync(join(directory, 'plugins.json'), JSON.stringify({ schemaVersion: 1, plugins }, null, 2) + '\n')
+writeFileSync(join(directory, 'plugins.json'), JSON.stringify({ schemaVersion: 2, plugins }, null, 2) + '\n')
 resolveBundledPluginsDirectory({ DSH_DISTRIBUTION_MODE: 'intranet', DSH_DESKTOP_BUNDLED_PLUGINS_DIR: directory })
 console.log(JSON.stringify({ directory, plugins: plugins.map(({ files, electronFiles, ...plugin }) => ({ ...plugin, files: files.length,
   ...electronFiles === undefined ? {} : { electronFiles: electronFiles.length } })) }, null, 2))

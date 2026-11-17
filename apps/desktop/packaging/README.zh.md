@@ -213,7 +213,7 @@ pnpm run prepare:desktop
 
 ## 插件归档与缓存隔离
 
-小铀助手的 Windows x64 组合入口会依次重建 Office Agents（含 PPT 专家）、架构评审、待办清单和 EasyView 文档工作台归档，将四项完整放入本轮内置插件目录，重新构建 Desktop 运行时，再生成包含品牌启动页和安装器页面的未签名安装包。EasyView 使用包含运行依赖的 Windows 开发候选包，独立发行验收仍待完成。需要 Windows x64、Node 24、已安装的各仓库依赖、Desktop 的打包配置和 Windows C++ 构建工具；源码仓库路径和归档命令固定在 Office Agents 的 `scripts/xiaoyou-packaging.json` 中，可通过 `--config <recipe.json>` 选择本机配置，配置中的插件路径相对于配置文件解析。
+小铀助手的 Windows x64 组合入口会依次重建 Office Agents、独立原生 PPT 专家、架构评审、待办清单和四个文档编辑器归档，将八项完整放入本轮内置插件目录，重新构建 Desktop 运行时，再生成包含品牌启动页和安装器页面的未签名安装包。需要 Windows x64、Node 24、已安装的各仓库依赖、Desktop 的打包配置和 Windows C++ 构建工具；源码仓库路径和归档命令固定在 Office Agents 的 `scripts/xiaoyou-packaging.json` 中，可通过 `--config <recipe.json>` 选择本机配置，配置中的插件路径相对于配置文件解析。
 
 确认完整版本号后，从 Office Agents 仓库运行：
 
@@ -223,7 +223,7 @@ pnpm run package:xiaoyou:win -- --build-version <version>
 
 默认在 Office Agents 的 `output/xiaoyou-<version>-<run-id>/` 下创建新目录；用 `--output <new-directory>` 指定位置时同样拒绝已有目录。`--plan` 只打印参数和阶段，不生成产物。可选 `--pet <offline.zip>` 接收已准备的 dsh-pet ZIP；该 ZIP 作为固定外部输入复制并记录 SHA-256，不从源码重建，更新 dsh-pet 时须先单独生成新 ZIP。
 
-组合入口只选取本轮命令生成的归档，保存副本并核对归档入口与本地构建字节。`build-receipt.json` 记录源码 commit、dirty 状态、已跟踪改动的指纹、归档 SHA-256、阶段结果和最终安装包路径；详细输出写入 `logs/`，控制台只打印阶段及结果。`candidate/artifacts/` 保存安装包和 SHA-256 文件。失败立即停止并保留回执和日志，下次使用新输出目录；组合入口不支持 `--resume`、旧 `bundled-plugins` 或旧 `win-unpacked` 输入。
+组合入口只选取本轮命令生成的归档，保存副本并核对归档入口与本地构建字节。Schema 2 内置资源只保留 `plugin.tgz` 和文件清单，原生 PPT 运行时只由 `dsh-plugin-ppt` 携带。启动时先校验归档，再解包到 profile 临时目录，核对全部清单文件和包身份后原子发布；解包失败会清理临时目录，保留已安装插件和 profile 元数据，schema 1 部署延续原有行为。`build-receipt.json` 记录源码 commit、dirty 状态、已跟踪改动的指纹、归档 SHA-256、阶段结果和最终安装包路径；详细输出写入 `logs/`，控制台只打印阶段及结果。`candidate/artifacts/` 保存安装包和 SHA-256 文件。失败立即停止并保留回执和日志，下次使用新输出目录；组合入口不支持 `--resume`、旧 `bundled-plugins` 或旧 `win-unpacked` 输入。
 
 同一组合入口通过 `apps/desktop/.desktop-build/xiaoyou-packaging.lock` 串行运行；其他入口仍可能修改共享的 Desktop 准备目录，因此同一源码工作区不要并行打包。进程被强制终止后，确认锁中 PID 对应进程已退出，再删除残留锁。组合入口调用现有打包流程的资源完整性检查，不安装或上传产物。
 
