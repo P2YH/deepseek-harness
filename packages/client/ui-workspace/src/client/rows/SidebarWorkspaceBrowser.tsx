@@ -7,5 +7,9 @@ import type { PropsRenderFactories, PropsRuntime } from '@deepseek-ai/dsh-client
  * @returns the native Workspace browser.
  */
 export function SidebarWorkspaceBrowser(props: PropsRuntime<'sidebar.workspaces'> & PropsRenderFactories) {
-  return props.renderFactorySlot('workspace.browser', { wide: props.wide, expandSidebar: props.expandSidebar })
+  return props.renderFactorySlot('workspace.browser', {
+    wide: props.wide,
+    expandSidebar: props.expandSidebar,
+    useSectionScroller: props.useSectionScroller,
+  })
 }

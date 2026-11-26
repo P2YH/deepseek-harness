@@ -6,16 +6,11 @@ import { join } from 'node:path'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import { runDesktopCli } from '../src/cli.ts'
 
-const { runCli, installOfficeEngineResolution } = vi.hoisted(() => ({
+const { runCli } = vi.hoisted(() => ({
   runCli: vi.fn<typeof import('@deepseek-ai/dsh/lib/bin.js')['runCli']>(async () => {}),
-  installOfficeEngineResolution: vi.fn(),
 }))
 
 vi.mock('@deepseek-ai/dsh/lib/bin.js', () => ({ runCli }))
-vi.mock('../src/office-engine.ts', async importOriginal => ({
-  ...await importOriginal<typeof import('../src/office-engine.ts')>(),
-  installOfficeEngineResolution,
-}))
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -43,7 +38,6 @@ it.each([undefined, 'standard'])('keeps packaged intranet mode with ambient mode
     distributionMode: 'intranet',
   })
   expect(options?.packageManager?.env).toMatchObject({ DSH_DISTRIBUTION_MODE: 'intranet' })
-  expect(installOfficeEngineResolution).toHaveBeenCalledWith(f.runtime)
 })
 
 it.each([{ dshDistributionMode: 'standard' }, {}])('keeps packaged standard mode with manifest %j', async (manifest) => {
@@ -66,5 +60,4 @@ it.each([false, 'offline'])('rejects invalid packaged mode %s before CLI dispatc
   const f = fixture({ dshDistributionMode: mode })
   await expect(runDesktopCli(f.runtime, f.support)).rejects.toThrow(/distribution mode|DSH_DISTRIBUTION_MODE/u)
   expect(runCli).not.toHaveBeenCalled()
-  expect(installOfficeEngineResolution).not.toHaveBeenCalled()
 })

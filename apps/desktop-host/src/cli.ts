@@ -1,19 +1,30 @@
 /** Public dsh commands using the immutable runtime carried by the Desktop installation. */
 
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { runCli } from '@deepseek-ai/dsh/lib/bin.js'
 import { resolveDistributionMode } from '@deepseek-ai/dsh-launch-environment'
-import { installOfficeEngineResolution, runtimeArchivePath } from './office-engine.ts'
+
+/**
+ * Locate the archive containing a packaged runtime.
+ * @param runtimeDir - Prepared or ASAR-contained runtime directory.
+ * @returns Parent archive path, or undefined for a prepared directory.
+ */
+export function runtimeArchivePath(runtimeDir: string): string | undefined {
+  const parent = dirname(runtimeDir)
+  return basename(parent) === 'app.asar' ? parent : undefined
+}
 
 /**
  * Run the ordinary CLI with Desktop's bundled package manager, fixed distribution mode and reserved-profile plugin access.
- * @param runtimeDir - Prepared or ASAR-contained production DSH package tree.
- * @param supportDir - Physical Desktop runtime directory containing the primary-runtime payload and Node launchers.
+ * @param first - Prepared or ASAR-contained runtime directory (when `second` is provided), or physical Desktop support directory.
+ * @param second - Physical Desktop runtime directory containing the primary-runtime payload and Node launchers.
  * @returns Completion of the selected CLI command; profile plugins own their process lifetime.
  */
-export async function runDesktopCli(runtimeDir: string, supportDir: string): Promise<void> {
-  const archive = runtimeArchivePath(runtimeDir)
+export async function runDesktopCli(first: string, second?: string): Promise<void> {
+  const runtimeDir = second === undefined ? undefined : first
+  const supportDir = second ?? first
+  const archive = runtimeDir === undefined ? undefined : runtimeArchivePath(runtimeDir)
   let modeInput: unknown = process.env.DSH_DISTRIBUTION_MODE
   if (archive !== undefined) {
     const manifest: unknown = JSON.parse(readFileSync(join(archive, 'package.json'), 'utf8'))
@@ -25,7 +36,6 @@ export async function runDesktopCli(runtimeDir: string, supportDir: string): Pro
   }
   const distributionMode = resolveDistributionMode(modeInput)
   process.env.DSH_DISTRIBUTION_MODE = distributionMode
-  installOfficeEngineResolution(runtimeDir)
   await runCli({
     manageDesktopProfile: true,
     distributionMode,

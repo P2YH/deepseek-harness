@@ -1,5 +1,5 @@
 /** Launcher-owned intranet capabilities, applied above profile edits and preset configurations. */
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { distributionModeOf, resolveDistributionMode, type DistributionMode } from '@deepseek-ai/dsh-launch-environment'
 
@@ -74,9 +74,9 @@ export function applyDistributionEntries(entries: EntryOptions[], mode: Distribu
  */
 export function installDistributionPolicy(ctx: Context): void {
   if (distributionModeOf(ctx) !== 'intranet') return
-  ctx.on('internal/config', function (this: Fiber, _raw, next) {
+  ctx.on('internal/config', (fiber, next) => {
     const config: unknown = next()
-    const entry = this.entry
+    const entry = fiber.entry
     if (entry === undefined) return config
     if (DISABLED_MODULES.has(packageName(entry.options.name))) {
       throw new Error(`Intranet distribution disables ${entry.options.name}; the stored configuration is preserved`)

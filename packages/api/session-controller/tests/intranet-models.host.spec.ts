@@ -43,7 +43,7 @@ async function fixture() {
   const removeAdapter = ctx.llm.registerAdapter(['gateway'], adapter)
   let selected: ModelSelection | null = null
   const save = vi.fn((selection: ModelSelection) => { selected = selection })
-  const remote = createSessionTestRemote(ctx, {
+  const remote = await createSessionTestRemote(ctx, {
     cwd, defaultModelSelection: () => selected, saveDefaultModelSelection: save,
   })
   return { ctx, cwd, adapter, removeAdapter, remote, save }
@@ -70,11 +70,17 @@ function storeHistory(ctx: Context, cwd: string, events: SessionEvent[], beforeW
     open: (_sessionId: SessionId, access: SessionAccess): Promise<SessionHandle> => {
       opens.push(access)
       if (access === 'write') beforeWrite?.()
+      const unsubscribe = access === 'write'
+        ? ctx.on('session/event', (liveSession, event) => {
+          if (liveSession.id === id && !events.some(existing => existing.seq === event.seq)) events.push(event)
+        })
+        : undefined
+      const close = () => { unsubscribe?.(); return Promise.resolve() }
       return Promise.resolve({
         id, header, inheritedEventCount: SessionLogOffset(0), access,
         read: () => Promise.resolve({ eventState: 'detached', events: structuredClone(events) }),
         append: (appended) => { events.push(...appended); return Promise.resolve() },
-        flush: () => Promise.resolve(), close: () => Promise.resolve(), [Symbol.asyncDispose]: () => Promise.resolve(),
+        flush: () => Promise.resolve(), close, [Symbol.asyncDispose]: close,
       })
     },
   }) as never)

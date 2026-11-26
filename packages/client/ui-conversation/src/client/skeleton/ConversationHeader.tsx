@@ -17,11 +17,13 @@ export function ConversationHeader({
   const blank = session === undefined || conversation === undefined
     || (session.blank && conversationPhase(session, conversation) === 'blank')
   return (
-    <header className={clsx(css.header, blank && css.headerBlank, sessionId === undefined && css.headerSessionless)} data-window-drag>
+    <header className={clsx(css.header, blank && css.headerBlank)} data-window-drag>
       <div className={css.headerLeading} data-conversation-header-leading="">
         {!embedded && renderSlot('conversation.header.leading', {})}
       </div>
       {sessionId === undefined
+        // The empty title row keeps the blank-Session header height, so the
+        // Hero centers its input card at the same offset before a Session exists.
         ? <div className={css.titleRow} />
         : renderSlot('conversation.session.header', { hideChrome: blank, onOpenSession })}
     </header>

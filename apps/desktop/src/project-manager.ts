@@ -24,9 +24,8 @@ import type { DesktopRelease } from './release.ts'
 import { seedIntranetModelCredentials } from './intranet-model-credentials.ts'
 import { seedBundledPlugins } from './bundled-plugins.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
-import {
-  initProfile, PROFILE_TEMPLATES, removeLinkProjections, sanitizeProfile, type ProfileTemplate,
-} from '@deepseek-ai/dsh-app-boot'
+import { initProfile, removeLinkProjections, sanitizeProfile } from '@deepseek-ai/dsh-app-boot'
+import { PROFILE_TEMPLATES, type ProfileTemplate } from '@deepseek-ai/dsh-official-bundles'
 
 const PROJECT_NAME = '@deepseek-ai/dsh-desktop-runtime'
 const DSH_PACKAGE = '@deepseek-ai/dsh'
